@@ -26,7 +26,9 @@ export default class App extends Component {
       loanTerm: 0,
       loanRate: 0,
       loanPointRate: 0,
-      pointsOffered: 0
+      pointsOffered: 0,
+      closingCost: 0,
+      additionalMonthlyFees: 0
     }
   }
 
@@ -77,7 +79,6 @@ export default class App extends Component {
         <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '10%' }}>
 
           <p>ARV Value-Rent Ratio (2% Rule): {this.calculatePropertyRentRatio()}</p>
-          <p>Estimated property expenses (50% Rule): {this.calculateMonthlyPropertyExpensesThroughRent()} </p>
           <p>Property Value - ARV Difference: ($){this.calculatePropertyARVDifferenceMoney()}</p>
           <p>Property Value - ARV Difference: (%){this.calculatePropertyARVDifferencePercent()}</p>
           <p>Pre-ARV Price per sq.ft ${this.calculatePreARVSquareFootage()} per sq.ft</p>
@@ -115,14 +116,28 @@ export default class App extends Component {
             <label>Fixed Rate</label>
             <input name={'loanRate'} onChange={(ev) => this.setState({ loanRate: ev.target.value })}/>
           </div>
+        </div>
 
+        <div style={Item}>
+          <div>
+            <label>Closing Costs</label>
+            <input name={'closingCost'} onChange={(ev) => this.setState({ closingCost: ev.target.value })}/>
+          </div>
+
+          <div>
+            <label>Additional Monthly Fees (Taxes, Insurance, etc)</label>
+            <input name={'additionalMonthlyFees'} onChange={(ev) => this.setState({ additionalMonthlyFees: ev.target.value })}/>
+          </div>
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '10%' }}>
+          <p>Percent Values are against the value of the loan, not the home</p>
           <p>Down Payment: ${this.calculateMortgageDownPayment()}</p>
           <p>Down Payment: {this.calculateMortgagePercent()}%</p>
           <p>Monthly Mortgage Payment: ${this.calculateMonthlyFixedRatePayment(this.state.loanRate)}</p>
           <p>Total Payments: ${this.calculateTotalPaymentsBaseInterest()}</p>
+          <p>Closing Cost: {this.calculateClosingCostPercent()}%</p>
+          <p>Estimated Closing Cost Range (2-5%): {this.calculateClosingCostRange()}</p>
         </div>
 
         <h4 style={ItemHeader}>Mortgage Points Information</h4>
@@ -149,19 +164,34 @@ export default class App extends Component {
         </div>
 
         <h4 style={ItemHeader}>Cash Flow</h4>
+
+        <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '10%' }}>
+          <p>Positive Cash Flow: (Rent - Monthly Mortgage - Other Fees(Taxes, Insurance)) ${this.calculateMonthlyPositiveCashFlow()}</p>
+          <p>Estimated property expenses (50% Rule): {this.calculateMonthlyPositiveCashFlow() / 2} </p>
+          <p>Yearly ROI (without overhead): {this.calculateCashFlowRateOfReturn(1)}%</p>
+          <p>Yearly ROI (with 50% Rule): {this.calculateCashFlowRateOfReturn(0.5)}%</p>
+          <p>Yearly ROI (with 25% Rule): {this.calculateCashFlowRateOfReturn(0.75)}%</p>
+        </div>
+
+        <h3></h3>
+
+        <div style={Item}>
+          {/* <p>12 Months (Gross): ${this.calculateYearlyGrossRent()}</p>
+          <p>6 Months (Gross): ${this.calculateYearlyGrossRent() / 2}</p>
+          <p>3 Months (Gross): ${(this.calculateYearlyGrossRent() / 12) * 3}</p> */}
+        </div>
+
       </div>
+
+      // Notes Section
+      // Lender Credits - Adding lender credits increments loan interest amount
     );
   }
 
   calculatePropertyRentRatio() {
     const { rentValue, propertyArvValue } = this.state;
     const ratio = (rentValue / propertyArvValue) * 100;
-    return ratio;
-  }
-
-  calculateMonthlyPropertyExpensesThroughRent() {
-    const monthlyPropertyExpenses = this.state.rentValue / 2;
-    return monthlyPropertyExpenses;
+    return ratio.toFixed(2);
   }
 
   calculatePropertyARVDifferenceMoney() {
@@ -173,17 +203,17 @@ export default class App extends Component {
   calculatePropertyARVDifferencePercent() {
     const { propertyValue, propertyArvValue } = this.state;
     const percentDifference = 100 - ((propertyValue/propertyArvValue) * 100);
-    return percentDifference;
+    return percentDifference.toFixed(2);
   }
 
   calculatePreARVSquareFootage() {
     const { propertySize, propertyValue } = this.state;
-    return propertyValue / propertySize;
+    return (propertyValue / propertySize).toFixed(2);
   }
 
   calculateARVSquareFootage() {
     const { propertySize, propertyArvValue } = this.state;
-    return propertyArvValue / propertySize;
+    return (propertyArvValue / propertySize).toFixed(2);
   }
 
   calculateTaxAmount() {
@@ -251,6 +281,23 @@ export default class App extends Component {
     return totalPayments;
   }
 
+  calculateClosingCostPercent() {
+    const { loanValue, closingCost } = this.state;
+
+    const closingCostInPercent = (closingCost / loanValue) * 100;
+    return closingCostInPercent.toFixed(2);
+  }
+
+  calculateClosingCostRange() {
+    const { loanValue } = this.state;
+    const onePercent = loanValue / 100;
+
+    const twoPercent = onePercent * 2;
+    const fivePercent = onePercent * 5;
+
+    return `$${twoPercent} -- $${fivePercent}`;
+  }
+
   calculateTotalPaymentsPointInterest() {
     const { loanPointRate, loanTerm } = this.state;
 
@@ -267,8 +314,27 @@ export default class App extends Component {
 
     const paymentSavings = (regularRatePayment - pointRatePayment).toFixed(2);
     const monthsToBreakEven = ((this.calculateMortgagePointValue() / paymentSavings) * this.state.pointsOffered);
-    const yearsToBreakEven = (monthsToBreakEven / 12).toFixed(2)
+    const yearsToBreakEven = (monthsToBreakEven / 12).toFixed(2);
 
-    return `Payment savings: (month) ${paymentSavings} (year) ${(paymentSavings * 12).toFixed(2)}, Years: ${yearsToBreakEven}`;
+    return `Savings - ${paymentSavings}/month, ${(paymentSavings * 12).toFixed(2)}/year. Break even in year(s): ${yearsToBreakEven}`;
   }
+
+  calculateMonthlyPositiveCashFlow() {
+    const { rentValue, loanRate, additionalMonthlyFees } = this.state;
+    const cashFlow = rentValue - this.calculateMonthlyFixedRatePayment(loanRate) - additionalMonthlyFees;
+    return cashFlow;
+  }
+
+  // TODO:
+  calculateMonthlyPositiveCashFlowWithPoints() { 
+  }
+
+  calculateCashFlowRateOfReturn(surpriseExpenseRatio) { // 0.5, 0.25, 1, etc
+    const yearlyCashFlow = (this.calculateMonthlyPositiveCashFlow() * surpriseExpenseRatio) * 12;
+    const moneyDown = +this.calculateMortgageDownPayment() + +this.state.closingCost;
+    const roi = (yearlyCashFlow / moneyDown) * 100;
+
+    return roi.toFixed(2);
+  }
+
 }
