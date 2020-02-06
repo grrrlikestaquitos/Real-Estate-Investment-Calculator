@@ -91,9 +91,9 @@ export default class App extends Component {
         <h3 style={ItemHeader}>Home Appreciation (Market Value)</h3>
 
         <div style={Item}>
-          <p>1 Year: ${this.calculateHomeAppreciation(1)}</p>
-          <p>5 Years: ${this.calculateHomeAppreciation(5)}</p>
-          <p>10 Years: ${this.calculateHomeAppreciation(10)}</p>
+          <p>1 Year: ${this.calculateHomeAppreciation(1, this.state.propertyArvValue)}</p>
+          <p>5 Years: ${this.calculateHomeAppreciation(5, this.state.propertyArvValue)}</p>
+          <p>10 Years: ${this.calculateHomeAppreciation(10, this.state.propertyArvValue)}</p>
         </div>
         
         <h3 style={ItemHeader}>Rent Information</h3>
@@ -182,8 +182,8 @@ export default class App extends Component {
         <h4 style={ItemHeader}>Cash Flow</h4>
 
         <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '10%' }}>
-          <p>Positive Cash Flow: ${this.calculateMonthlyPositiveCashFlow()}</p>
-          <p>Estimated property expenses (50% Rule): {this.calculateMonthlyPositiveCashFlow() / 2} </p>
+          <p>Positive Cash Flow: ${this.calculateMonthlyPositiveCashFlow(this.state.rentValue)}</p>
+          <p>Estimated property expenses (50% Rule): {this.calculateMonthlyPositiveCashFlow(this.state.rentValue) / 2} </p>
           <p>Yearly ROI (without overhead): {this.calculateCashFlowRateOfReturn(1)}%</p>
           <p>Yearly ROI (with 50% Rule): {this.calculateCashFlowRateOfReturn(0.5)}%</p>
           <p>Yearly ROI (with 25% Rule): {this.calculateCashFlowRateOfReturn(0.75)}%</p>
@@ -203,19 +203,19 @@ export default class App extends Component {
           <p>30 Years (Gross): ${this.calculatePositiveCashFlowForYear(30)}</p>
         </div>
 
-        {/* <h3 style={ItemHeader}>Cash Flow Over Time (with {this.state.appreciationRate}% appreciation)</h3>
+        <h3 style={ItemHeader}>Cash Flow Over Time (with {this.state.appreciationRate}% appreciation)</h3>
 
         <div style={Item}>
           <p>1 Years: ${this.calculatePositiveCashFlowWithAppreciation(1)}</p>
           <p>5 Years: ${this.calculatePositiveCashFlowWithAppreciation(5)}</p>
-          <p>10 Years: ${this.calculatePositiveCashFlowWithAppreciation(10)}</p>
+          {/* <p>10 Years: ${this.calculatePositiveCashFlowWithAppreciation(10)}</p> */}
         </div>
 
         <div style={Item}>
-          <p>15 Year: ${this.calculatePositiveCashFlowWithAppreciation(15)}</p>
+          {/* <p>15 Year: ${this.calculatePositiveCashFlowWithAppreciation(15)}</p>
           <p>20 Years: ${this.calculatePositiveCashFlowWithAppreciation(20)}</p>
-          <p>30 Years: ${this.calculatePositiveCashFlowWithAppreciation(30)}</p>
-        </div> */}
+          <p>30 Years: ${this.calculatePositiveCashFlowWithAppreciation(30)}</p> */}
+        </div>
       </div>
 
       // Notes Section
@@ -354,14 +354,14 @@ export default class App extends Component {
     return `Savings - ${paymentSavings}/month, ${(paymentSavings * 12).toFixed(2)}/year. Break even in year(s): ${yearsToBreakEven}`;
   }
 
-  calculateMonthlyPositiveCashFlow() {
-    const { rentValue, loanRate, additionalMonthlyFees } = this.state;
+  calculateMonthlyPositiveCashFlow(rentValue) {
+    const { loanRate, additionalMonthlyFees } = this.state;
     const cashFlow = rentValue - this.calculateMonthlyFixedRatePayment(loanRate) - additionalMonthlyFees;
     return cashFlow.toFixed(2);
   }
 
   calculateCashFlowRateOfReturn(surpriseExpenseRatio) { // 0.5, 0.25, 1, etc
-    const yearlyCashFlow = (this.calculateMonthlyPositiveCashFlow() * surpriseExpenseRatio) * 12;
+    const yearlyCashFlow = (this.calculateMonthlyPositiveCashFlow(this.state.rentValue) * surpriseExpenseRatio) * 12;
     const moneyDown = +this.calculateMortgageDownPayment() + +this.state.closingCost;
     const roi = (yearlyCashFlow / moneyDown) * 100;
 
@@ -369,20 +369,37 @@ export default class App extends Component {
   }
 
   calculatePositiveCashFlowForYear(years) {
-    const oneYearCashFlow = this.calculateMonthlyPositiveCashFlow() * 12;
+    const oneYearCashFlow = this.calculateMonthlyPositiveCashFlow(this.state.rentValue) * 12;
     return (oneYearCashFlow * years).toFixed(2);
   }
 
   calculatePositiveCashFlowWithAppreciation(years) {
-    const { appreciationRate } = this.state;
+    const { propertyArvValue, rentValue } = this.state;
+
+    let totalAppreciatedCashFlow = +this.calculateMonthlyPositiveCashFlow(rentValue) * 12;
+
+    let lastYearHomeValue = +this.calculateHomeAppreciation(1, propertyArvValue);
+
+    for (let year = 1; year < years; year++) {
+      const homeAppreciationValue = this.calculateHomeAppreciation(year, lastYearHomeValue);
+      const rent = (homeAppreciationValue / 100) * this.calculatePropertyRentRatio();
+      const cashFlow = this.calculateMonthlyPositiveCashFlow(rent) * 12;
+      
+      // console.log(`Calculating appreciation for year #${year}`);
+      totalAppreciatedCashFlow += +cashFlow;
+
+      lastYearHomeValue = +homeAppreciationValue;
+    }
+
+    return totalAppreciatedCashFlow;
   }
 
-  calculateHomeAppreciation(years) {
-    const { appreciationRate, propertyArvValue } = this.state;
+  calculateHomeAppreciation(years, homeValue) {
+    const { appreciationRate } = this.state;
 
     // Formula for compounding interest rate
     // A = P (1 + r/n)^nt
-    const principal = propertyArvValue;
+    const principal = homeValue;
     const interestRate = appreciationRate / 100;
     const repetitions = 1; // Interest only applied once
     const time = years;
