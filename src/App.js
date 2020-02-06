@@ -95,6 +95,12 @@ export default class App extends Component {
           <p>5 Years: ${this.calculateHomeAppreciation(5, this.state.propertyArvValue)}</p>
           <p>10 Years: ${this.calculateHomeAppreciation(10, this.state.propertyArvValue)}</p>
         </div>
+
+        <div style={Item}>
+          <p>15 Year: ${this.calculateHomeAppreciation(15, this.state.propertyArvValue)}</p>
+          <p>20 Years: ${this.calculateHomeAppreciation(20, this.state.propertyArvValue)}</p>
+          <p>30 Years: ${this.calculateHomeAppreciation(30, this.state.propertyArvValue)}</p>
+        </div>
         
         <h3 style={ItemHeader}>Rent Information</h3>
         <div style={Item}>
@@ -207,14 +213,20 @@ export default class App extends Component {
 
         <div style={Item}>
           <p>1 Years: ${this.calculatePositiveCashFlowWithAppreciation(1)}</p>
-          <p>5 Years: ${this.calculatePositiveCashFlowWithAppreciation(5)}</p>
-          {/* <p>10 Years: ${this.calculatePositiveCashFlowWithAppreciation(10)}</p> */}
+          <p>2 Years: ${this.calculatePositiveCashFlowWithAppreciation(2)}</p>
+          <p>3 Years: ${this.calculatePositiveCashFlowWithAppreciation(3)}</p>
         </div>
 
         <div style={Item}>
-          {/* <p>15 Year: ${this.calculatePositiveCashFlowWithAppreciation(15)}</p>
+          <p>4 Years: ${this.calculatePositiveCashFlowWithAppreciation(4)}</p>
+          <p>5 Years: ${this.calculatePositiveCashFlowWithAppreciation(5)}</p>
+          <p>10 Years: ${this.calculatePositiveCashFlowWithAppreciation(6)}</p>
+        </div>
+
+        <div style={Item}>
+          <p>15 Year: ${this.calculatePositiveCashFlowWithAppreciation(15)}</p>
           <p>20 Years: ${this.calculatePositiveCashFlowWithAppreciation(20)}</p>
-          <p>30 Years: ${this.calculatePositiveCashFlowWithAppreciation(30)}</p> */}
+          <p>30 Years: ${this.calculatePositiveCashFlowWithAppreciation(30)}</p>
         </div>
       </div>
 
@@ -384,10 +396,8 @@ export default class App extends Component {
       const homeAppreciationValue = this.calculateHomeAppreciation(year, lastYearHomeValue);
       const rent = (homeAppreciationValue / 100) * this.calculatePropertyRentRatio();
       const cashFlow = this.calculateMonthlyPositiveCashFlow(rent) * 12;
-      
-      // console.log(`Calculating appreciation for year #${year}`);
-      totalAppreciatedCashFlow += +cashFlow;
 
+      totalAppreciatedCashFlow += +cashFlow;
       lastYearHomeValue = +homeAppreciationValue;
     }
 
