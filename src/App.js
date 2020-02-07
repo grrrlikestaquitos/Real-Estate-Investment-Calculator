@@ -80,7 +80,7 @@ export default class App extends Component {
         <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '10%' }}>
 
           <p>ARV Value-Rent Ratio (2% Rule): {this.calculatePropertyRentRatio()}</p>
-          <p>Property Value - ARV Difference: ($){this.calculatePropertyARVDifferenceMoney()}</p>
+          <p>Property Value - ARV Difference: ($){this.calculatePropertyARVDifferenceMoney().toLocaleString()}</p>
           <p>Property Value - ARV Difference: (%){this.calculatePropertyARVDifferencePercent()}</p>
           <p>Pre-ARV Price per sq.ft ${this.calculatePreARVSquareFootage()} per sq.ft</p>
           <p>ARV Price per sq.ft ${this.calculateARVSquareFootage()} per sq.ft</p>
@@ -91,28 +91,28 @@ export default class App extends Component {
         <h3 style={ItemHeader}>Home Appreciation (Market Value)</h3>
 
         <div style={Item}>
-          <p>1 Year: ${this.calculateHomeAppreciation(1, this.state.propertyArvValue)}</p>
-          <p>5 Years: ${this.calculateHomeAppreciation(5, this.state.propertyArvValue)}</p>
-          <p>10 Years: ${this.calculateHomeAppreciation(10, this.state.propertyArvValue)}</p>
+          <p>1 Year: ${this.calculateHomeAppreciation(1, this.state.propertyArvValue).toLocaleString()}</p>
+          <p>5 Years: ${this.calculateHomeAppreciation(5, this.state.propertyArvValue).toLocaleString()}</p>
+          <p>10 Years: ${this.calculateHomeAppreciation(10, this.state.propertyArvValue).toLocaleString()}</p>
         </div>
 
         <div style={Item}>
-          <p>15 Year: ${this.calculateHomeAppreciation(15, this.state.propertyArvValue)}</p>
-          <p>20 Years: ${this.calculateHomeAppreciation(20, this.state.propertyArvValue)}</p>
-          <p>30 Years: ${this.calculateHomeAppreciation(30, this.state.propertyArvValue)}</p>
+          <p>15 Year: ${this.calculateHomeAppreciation(15, this.state.propertyArvValue).toLocaleString()}</p>
+          <p>20 Years: ${this.calculateHomeAppreciation(20, this.state.propertyArvValue).toLocaleString()}</p>
+          <p>30 Years: ${this.calculateHomeAppreciation(30, this.state.propertyArvValue).toLocaleString()}</p>
         </div>
         
         <h3 style={ItemHeader}>Rent Information</h3>
         <div style={Item}>
-          <p>12 Months (Gross): ${this.calculateYearlyGrossRent()}</p>
-          <p>6 Months (Gross): ${this.calculateYearlyGrossRent() / 2}</p>
-          <p>3 Months (Gross): ${(this.calculateYearlyGrossRent() / 12) * 3}</p>
+          <p>12 Months (Gross): ${this.calculateYearlyGrossRent().toLocaleString()}</p>
+          <p>6 Months (Gross): ${(this.calculateYearlyGrossRent() / 2).toLocaleString()}</p>
+          <p>3 Months (Gross): ${((this.calculateYearlyGrossRent() / 12) * 3).toLocaleString()}</p>
         </div>
 
         <h3 style={ItemHeader}>Ideal Renter Information</h3>
 
         <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '10%' }}>
-          <p>Tenant Income - Rent/Income Ratio {this.calculateTenantIncomeRange()}</p>
+          <p>Rent/Income Ratio: {this.calculateTenantIncomeRange()}</p>
         </div>
         
         <h3 style={ItemHeader}>Optimal Deals</h3>
@@ -153,11 +153,11 @@ export default class App extends Component {
         
         <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '10%' }}>
           <p>Percent Values are against the value of the loan, not the home</p>
-          <p>Down Payment: ${this.calculateMortgageDownPayment()}</p>
+          <p>Down Payment: ${this.calculateMortgageDownPayment().toLocaleString()}</p>
           <p>Down Payment: {this.calculateMortgagePercent()}%</p>
-          <p>Mortgage Payment: ${this.calculateMonthlyFixedRatePayment(this.state.loanRate)}</p>
-          <p>Monthly Payment: ${+this.calculateMonthlyFixedRatePayment(this.state.loanRate) + +this.state.additionalMonthlyFees}</p>
-          <p>End of Term Total (Interest & Principal Only) : ${this.calculateTotalPaymentsBaseInterest()}</p>
+          <p>Mortgage Payment: ${this.calculateMonthlyFixedRatePayment(this.state.loanRate).toLocaleString()}</p>
+          <p>Monthly Payment: ${(+this.calculateMonthlyFixedRatePayment(this.state.loanRate) + +this.state.additionalMonthlyFees).toLocaleString()}</p>
+          <p>End of Term Total (Interest & Principal Only) : ${this.calculateTotalPaymentsBaseInterest().toLocaleString()}</p>
           <p>Closing Cost: {this.calculateClosingCostPercent()}%</p>
           <p>Estimated Closing Cost Range (2-5%): {this.calculateClosingCostRange()}</p>
         </div>
@@ -177,12 +177,12 @@ export default class App extends Component {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', paddingLeft: '10%' }}>
-          <p>Cost for 1 point (1% of loan ammount): ${this.calculateMortgagePointValue()}</p>
-          <p>Points Payoff: ${this.calculateMortgagePointValue() * this.state.pointsOffered}</p>
+          <p>Cost for 1 point (1% of loan ammount): ${this.calculateMortgagePointValue().toLocaleString()}</p>
+          <p>Points Payoff: ${(this.calculateMortgagePointValue() * this.state.pointsOffered).toLocaleString()}</p>
           <p>Breaking Even - {this.calculatePointsBreakEven()}</p>
-          <p>Monthly Mortgage Payment: ${this.calculateMonthlyFixedRatePayment(this.state.loanPointRate)}</p>
-          <p>Total Payments: ${this.calculateTotalPaymentsPointInterest()}</p>
-          <p>Base/Point Interest Savings: ${(this.calculateTotalPaymentsBaseInterest() - this.calculateTotalPaymentsPointInterest()).toFixed(2)}</p>
+          <p>Monthly Mortgage Payment: ${this.calculateMonthlyFixedRatePayment(this.state.loanPointRate).toLocaleString()}</p>
+          <p>Total Payments: ${this.calculateTotalPaymentsPointInterest().toLocaleString()}</p>
+          <p>Savings with Points: ${Number(this.calculateTotalPaymentsBaseInterest() - this.calculateTotalPaymentsPointInterest().toFixed(2)).toLocaleString()}</p>
         </div>
 
         <h4 style={ItemHeader}>Cash Flow</h4>
@@ -195,41 +195,43 @@ export default class App extends Component {
           <p>Yearly ROI (with 25% Rule): {this.calculateCashFlowRateOfReturn(0.75)}%</p>
         </div>
 
-        <h3 style={ItemHeader}>Cash Flow Over Time (without appreciation/inflation)</h3>
+        <h3 style={ItemHeader}>Cash Flow Over Time (without appreciation)</h3>
 
         <div style={Item}>
-          <p>1 Year (Gross): ${this.calculatePositiveCashFlowForYear(1)}</p>
-          <p>5 Years (Gross): ${this.calculatePositiveCashFlowForYear(5)}</p>
-          <p>10 Years (Gross): ${this.calculatePositiveCashFlowForYear(10)}</p>
+          <p>1 Year (Gross): ${this.calculatePositiveCashFlowForYear(1).toLocaleString()}</p>
+          <p>5 Years (Gross): ${this.calculatePositiveCashFlowForYear(5).toLocaleString()}</p>
+          <p>10 Years (Gross): ${this.calculatePositiveCashFlowForYear(10).toLocaleString()}</p>
         </div>
 
         <div style={Item}>
-          <p>15 Year (Gross): ${this.calculatePositiveCashFlowForYear(15)}</p>
-          <p>20 Years (Gross): ${this.calculatePositiveCashFlowForYear(20)}</p>
-          <p>30 Years (Gross): ${this.calculatePositiveCashFlowForYear(30)}</p>
+          <p>15 Year (Gross): ${this.calculatePositiveCashFlowForYear(15).toLocaleString()}</p>
+          <p>20 Years (Gross): ${this.calculatePositiveCashFlowForYear(20).toLocaleString()}</p>
+          <p>30 Years (Gross): ${this.calculatePositiveCashFlowForYear(30).toLocaleString()}</p>
         </div>
 
         <h3 style={ItemHeader}>Cash Flow Over Time (with {this.state.appreciationRate}% appreciation)</h3>
 
         <div style={Item}>
-          <p>1 Years: ${this.calculatePositiveCashFlowWithAppreciation(1)}</p>
-          <p>2 Years: ${this.calculatePositiveCashFlowWithAppreciation(2)}</p>
-          <p>3 Years: ${this.calculatePositiveCashFlowWithAppreciation(3)}</p>
+          <p>1 Years: ${this.calculatePositiveCashFlowWithAppreciation(1).toLocaleString()}</p>
+          <p>2 Years: ${this.calculatePositiveCashFlowWithAppreciation(2).toLocaleString()}</p>
+          <p>3 Years: ${this.calculatePositiveCashFlowWithAppreciation(3).toLocaleString()}</p>
         </div>
 
         <div style={Item}>
-          <p>4 Years: ${this.calculatePositiveCashFlowWithAppreciation(4)}</p>
-          <p>5 Years: ${this.calculatePositiveCashFlowWithAppreciation(5)}</p>
-          <p>10 Years: ${this.calculatePositiveCashFlowWithAppreciation(10)}</p>
+          <p>4 Years: ${this.calculatePositiveCashFlowWithAppreciation(4).toLocaleString()}</p>
+          <p>5 Years: ${this.calculatePositiveCashFlowWithAppreciation(5).toLocaleString()}</p>
+          <p>10 Years: ${this.calculatePositiveCashFlowWithAppreciation(10).toLocaleString()}</p>
         </div>
 
         <div style={Item}>
-          <p>15 Year: ${this.calculatePositiveCashFlowWithAppreciation(15)}</p>
-          <p>20 Years: ${this.calculatePositiveCashFlowWithAppreciation(20)}</p>
-          <p>30 Years: ${this.calculatePositiveCashFlowWithAppreciation(30)}</p>
+          <p>15 Year: ${this.calculatePositiveCashFlowWithAppreciation(15).toLocaleString()}</p>
+          <p>20 Years: ${this.calculatePositiveCashFlowWithAppreciation(20).toLocaleString()}</p>
+          <p>30 Years: ${this.calculatePositiveCashFlowWithAppreciation(30).toLocaleString()}</p>
         </div>
+
+        <h6 style={ItemHeader}>Developed & Maintained by Andrei Villasana - Seattle, WA</h6>
+        <h6 style={ItemHeader}>v. 1.0.5</h6>
       </div>
-
       // Notes Section
       // Lender Credits - Adding lender credits increments loan interest amount
     );
@@ -270,13 +272,13 @@ export default class App extends Component {
     const propertyValuedTax = (propertyValue * tax).toFixed(2);
     const propertyARVValuedTax = (propertyArvValue  * tax).toFixed(2);
 
-    return `Sale: ${propertyValuedTax}, ARV: ${propertyARVValuedTax}`;
+    return `Sale: ${Number(propertyValuedTax).toLocaleString()}, ARV: ${Number(propertyARVValuedTax).toLocaleString()}`;
   }
 
   calculateOptimalRentRange() {
     const onePercent = this.state.propertyArvValue / 100;
 
-    return `${onePercent}-${onePercent * 2}`;
+    return `${onePercent.toLocaleString()}-${(onePercent * 2).toLocaleString()}`;
   }
 
   calculateYearlyGrossRent() {
@@ -325,7 +327,7 @@ export default class App extends Component {
 
     const months = loanTerm * 12;
     const totalPayments = this.calculateMonthlyFixedRatePayment(loanRate) * months;
-    return totalPayments.toFixed(2);
+    return Number(totalPayments.toFixed(2));
   }
 
   calculateClosingCostPercent() {
@@ -342,7 +344,7 @@ export default class App extends Component {
     const twoPercent = onePercent * 2;
     const fivePercent = onePercent * 5;
 
-    return `$${twoPercent} -- $${fivePercent}`;
+    return `$${twoPercent.toLocaleString()} -- $${fivePercent.toLocaleString()}`;
   }
 
   calculateTotalPaymentsPointInterest() {
@@ -350,7 +352,7 @@ export default class App extends Component {
 
     const months = loanTerm * 12;
     const totalPayments = this.calculateMonthlyFixedRatePayment(loanPointRate) * months;
-    return totalPayments.toFixed(2);
+    return Number(totalPayments.toFixed(2));
   }
 
   calculatePointsBreakEven() {
@@ -382,7 +384,7 @@ export default class App extends Component {
 
   calculatePositiveCashFlowForYear(years) {
     const oneYearCashFlow = this.calculateMonthlyPositiveCashFlow(this.state.rentValue) * 12;
-    return (oneYearCashFlow * years).toFixed(2);
+    return Number((oneYearCashFlow * years).toFixed(2));
   }
 
   calculatePositiveCashFlowWithAppreciation(years) {
@@ -417,13 +419,18 @@ export default class App extends Component {
     const firstComputation = 1 + (interestRate / repetitions);
     const finalAmount = principal * Math.pow(firstComputation, (repetitions * time));
 
-    return finalAmount.toFixed(2);
+    return Number(finalAmount.toFixed(2));
   }
 
   calculateTenantIncomeRange() {
     const twentyFivePercentIncome = this.calculateYearlyGrossRent() * 4;
     const thirtyPercentIncome = this.calculateYearlyGrossRent() * 3.3;
 
-    return (`25%: ${twentyFivePercentIncome} - 30%: ${thirtyPercentIncome}`);
+    return (`25%/$${twentyFivePercentIncome.toLocaleString()} - 30%/$${thirtyPercentIncome.toLocaleString()}`);
+  }
+
+  // Util
+  numberWithCommas(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   }
 }
