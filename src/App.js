@@ -220,7 +220,7 @@ export default class App extends Component {
         <div style={Item}>
           <p>4 Years: ${this.calculatePositiveCashFlowWithAppreciation(4)}</p>
           <p>5 Years: ${this.calculatePositiveCashFlowWithAppreciation(5)}</p>
-          <p>10 Years: ${this.calculatePositiveCashFlowWithAppreciation(6)}</p>
+          <p>10 Years: ${this.calculatePositiveCashFlowWithAppreciation(10)}</p>
         </div>
 
         <div style={Item}>
