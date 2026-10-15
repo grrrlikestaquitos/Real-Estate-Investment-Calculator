@@ -636,6 +636,18 @@ body {
   gap: 12px;
 }
 
+@media (max-width: 640px) {
+  .indicators {
+    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+    gap: 10px;
+  }
+
+  .indicator {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+}
+
 .indicator {
   display: flex;
   align-items: flex-start;
@@ -852,6 +864,16 @@ details > summary::-webkit-details-marker {
   margin-bottom: 0;
 }
 
+.input-group-hint {
+  margin: -4px 0 10px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.input-group-note {
+  margin: 10px 0 0;
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -951,6 +973,10 @@ details > summary::-webkit-details-marker {
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+}
+
+.tax-rate-details .note {
+  overflow-wrap: anywhere;
 }
 
 .tax-rate-table {

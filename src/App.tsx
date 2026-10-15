@@ -4,7 +4,12 @@ import { useCompareSelection } from './hooks/useCompareSelection'
 import { useDeals } from './hooks/useDeals'
 import { useTheme } from './hooks/useTheme'
 import { useToast } from './hooks/useToast'
-import { computeResults, yearlyProjection } from './lib/calculations'
+import {
+  DEFAULT_PMI_RATE_PERCENT,
+  SEVENTY_RULE_PERCENT,
+  computeResults,
+  yearlyProjection,
+} from './lib/calculations'
 import {
   formatCurrency,
   formatCurrencyExact,
@@ -311,7 +316,7 @@ export default function App() {
                     <div className="results-stack">
                       <Section
                         title="Cost of Ownership"
-                        subtitle="Mortgage, property tax, fees, and ~1% of the price per year for maintenance"
+                        subtitle="Mortgage, property tax, insurance, PMI, fees, and ~1% of the price per year for maintenance"
                       >
                         <div className="stats">
                           <StatRow
@@ -323,16 +328,36 @@ export default function App() {
                             value={formatCurrencyExact(results.monthlyTax)}
                           />
                           <StatRow
+                            label="Home Insurance / mo"
+                            value={
+                              results.monthlyInsurance == null
+                                ? 'Not entered'
+                                : formatCurrencyExact(results.monthlyInsurance)
+                            }
+                          />
+                          <StatRow
+                            label={
+                              results.pmiMonths
+                                ? `PMI${results.pmiEstimated ? ` (est. ${DEFAULT_PMI_RATE_PERCENT}%/yr)` : ''}, ends ~year ${Math.ceil(results.pmiMonths / 12)}`
+                                : 'PMI'
+                            }
+                            value={
+                              results.monthlyPmi === 0
+                                ? 'None (20%+ down)'
+                                : formatCurrencyExact(results.monthlyPmi)
+                            }
+                          />
+                          <StatRow
+                            label="Total Cost Over Term"
+                            value={formatCurrency(results.costOfOwnership)}
+                          />
+                          <StatRow
                             label="Annual Property Tax"
                             value={formatCurrency(results.annualTaxAtSale)}
                           />
                           <StatRow
                             label="Price / sq ft"
                             value={formatCurrencyExact(results.preArvPricePerSqFt)}
-                          />
-                          <StatRow
-                            label="Total Cost Over Term"
-                            value={formatCurrency(results.costOfOwnership)}
                           />
                         </div>
                       </Section>
@@ -348,7 +373,7 @@ export default function App() {
                             tone={cashFlowTone(results.rentVsBuyMonthly)}
                           />
                           <StatRow
-                            label="Front Ratio (PITI / Income)"
+                            label="Front Ratio (Housing Cost / Income)"
                             value={formatPercent(results.frontRatioPct)}
                           />
                         </div>
@@ -397,6 +422,94 @@ export default function App() {
 
                   {isInvestor ? (
                     <>
+                      <Section
+                        title="Rehab & Refinance"
+                        subtitle={`All-in cost, the ${SEVENTY_RULE_PERCENT}% rule, and what a refinance at ARV returns`}
+                        wide
+                      >
+                        <div className="stats stats-2col">
+                          <StatRow
+                            label="All-in Cost (Price + Rehab + Closing)"
+                            value={formatCurrency(results.allInCost)}
+                          />
+                          <StatRow
+                            label={`Refinance Loan (${activeDeal.inputs.refiLtv ?? '—'}% of ARV)`}
+                            value={formatCurrency(results.refinanceLoan)}
+                          />
+                          <StatRow
+                            label={`Max Offer (${SEVENTY_RULE_PERCENT}% Rule)`}
+                            value={formatCurrency(results.maxOfferSeventyRule)}
+                            tone={
+                              results.passesSeventyRule == null
+                                ? undefined
+                                : results.passesSeventyRule
+                                  ? 'positive'
+                                  : 'negative'
+                            }
+                          />
+                          <StatRow
+                            label="Payment After Refinance"
+                            value={formatCurrencyExact(results.refinancePayment)}
+                          />
+                          <StatRow
+                            label="Cash Invested (Down + Closing + Rehab)"
+                            value={formatCurrency(results.cashInvested)}
+                          />
+                          <StatRow
+                            label="Cash Out at Refinance"
+                            value={formatCurrency(results.cashOutAtRefinance)}
+                            tone={cashFlowTone(results.cashOutAtRefinance)}
+                          />
+                          <StatRow
+                            label="Equity After Refinance"
+                            value={formatCurrency(results.equityAfterRefinance)}
+                          />
+                          <StatRow
+                            label="Cash Left in Deal"
+                            value={
+                              results.cashLeftInDeal != null && results.cashLeftInDeal <= 0
+                                ? `${formatCurrency(results.cashLeftInDeal)} (all cash out)`
+                                : formatCurrency(results.cashLeftInDeal)
+                            }
+                          />
+                          <StatRow
+                            label={`Cash Flow After Refi (${results.expenseBasis === 'itemized' ? 'Itemized' : '50% Rule'})`}
+                            value={formatCurrencyExact(results.cashFlowAfterRefinance)}
+                            tone={cashFlowTone(results.cashFlowAfterRefinance)}
+                          />
+                          <StatRow
+                            label="Cash-on-Cash After Refi"
+                            value={
+                              results.cashLeftInDeal != null &&
+                              results.cashLeftInDeal <= 0 &&
+                              results.cashFlowAfterRefinance != null
+                                ? results.cashFlowAfterRefinance >= 0
+                                  ? 'Unlimited (no cash left in)'
+                                  : 'Negative (no cash left in)'
+                                : formatPercent(results.cashOnCashAfterRefinance)
+                            }
+                            tone={
+                              results.cashFlowAfterRefinance != null &&
+                              results.cashLeftInDeal != null &&
+                              results.cashLeftInDeal <= 0
+                                ? cashFlowTone(results.cashFlowAfterRefinance)
+                                : cashFlowTone(results.cashOnCashAfterRefinance)
+                            }
+                          />
+                        </div>
+                        {results.refinanceLoan == null ? (
+                          <p className="note">
+                            Enter ARV and the refinance terms under Deal Inputs → Refinance after
+                            rehab to see cash out and returns.
+                          </p>
+                        ) : (
+                          <p className="note">
+                            Assumes the purchase loan is paid off near its original balance after a
+                            short rehab, and rehab is paid in cash.
+                          </p>
+                        )}
+                      </Section>
+
                       <Section title="Cash Flow" wide>
                         <div className="stats stats-2col">
                           <StatRow
@@ -429,11 +542,38 @@ export default function App() {
                             value={formatPercent(results.roiTwentyFiveRule)}
                             tone={cashFlowTone(results.roiTwentyFiveRule)}
                           />
+                          {results.expenseBasis === 'itemized' ? (
+                            <>
+                              <StatRow
+                                label="Monthly Cash Flow (Itemized)"
+                                value={formatCurrencyExact(results.monthlyCashFlowItemized)}
+                                tone={cashFlowTone(results.monthlyCashFlowItemized)}
+                              />
+                              <StatRow
+                                label="Yearly ROI (Itemized)"
+                                value={formatPercent(results.roiItemized)}
+                                tone={cashFlowTone(results.roiItemized)}
+                              />
+                              <StatRow
+                                label="Operating Expenses / mo"
+                                value={formatCurrencyExact(results.monthlyOperatingExpenses)}
+                              />
+                              <StatRow
+                                label="Expense Ratio (% of Rent)"
+                                value={formatPercent(results.expenseRatioPct)}
+                              />
+                            </>
+                          ) : null}
                         </div>
                         <p className="note">
                           The 50% and 25% rules assume operating expenses equal 50% and 25% of gross
-                          rent; the mortgage payment and other monthly fees are always deducted. ROI
-                          is yearly cash flow over cash to close.
+                          rent
+                          {results.expenseBasis === 'itemized'
+                            ? '; itemized uses your vacancy, management, repairs, insurance, and property tax'
+                            : '. Add operating expenses under Deal Inputs for an itemized figure'}
+                          . The mortgage payment and other monthly fees are always deducted. ROI is
+                          yearly cash flow over cash invested (down payment, closing costs, and
+                          rehab).
                         </p>
                       </Section>
 

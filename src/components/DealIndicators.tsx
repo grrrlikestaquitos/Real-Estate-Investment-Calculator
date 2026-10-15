@@ -1,5 +1,5 @@
 import type { DealResults } from '../lib/calculations'
-import { FRONT_RATIO_PASS_PERCENT } from '../lib/calculations'
+import { FRONT_RATIO_PASS_PERCENT, SEVENTY_RULE_PERCENT } from '../lib/calculations'
 import { formatCurrency, formatPercent } from '../lib/format'
 import type { DealType } from '../lib/types'
 
@@ -80,6 +80,7 @@ export function DealIndicators({ dealType, results }: DealIndicatorsProps) {
   }
 
   const twoPercent = results.passesTwoPercentRule
+  const seventy = results.passesSeventyRule
   const cashFlow = results.monthlyCashFlow
   const cashFlowFifty = results.monthlyCashFlowFiftyRule
 
@@ -95,6 +96,18 @@ export function DealIndicators({ dealType, results }: DealIndicatorsProps) {
             : twoPercent
               ? 'Rent is at least 2% of ARV'
               : 'Rent is below 2% of ARV'
+        }
+      />
+      <Indicator
+        label={`${SEVENTY_RULE_PERCENT}% Rule`}
+        ok={seventy}
+        value={`Max offer ${formatCurrency(results.maxOfferSeventyRule)}`}
+        detail={
+          seventy == null
+            ? 'Enter price and ARV'
+            : seventy
+              ? `Price is within ${SEVENTY_RULE_PERCENT}% of ARV minus rehab`
+              : `Price is above ${SEVENTY_RULE_PERCENT}% of ARV minus rehab`
         }
       />
       <Indicator

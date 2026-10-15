@@ -1,7 +1,11 @@
 import type { Deal, DealType } from '../lib/types'
 import { ANALYSIS_HORIZONS } from '../lib/types'
 import type { DealResults } from '../lib/calculations'
-import { FRONT_RATIO_PASS_PERCENT, computeResults } from '../lib/calculations'
+import {
+  FRONT_RATIO_PASS_PERCENT,
+  SEVENTY_RULE_PERCENT,
+  computeResults,
+} from '../lib/calculations'
 import { formatCurrency, formatPercent } from '../lib/format'
 
 interface ComparisonTableProps {
@@ -22,8 +26,8 @@ interface Row {
   better?: 'higher' | 'lower'
   /** Color losses red and gains green (cash-flow-style values). */
   signed?: boolean
-  /** Rule behind a Pass/Fail badge next to the value. */
-  passes?: (value: number) => boolean
+  /** Rule behind a Pass/Fail badge next to the value (null: not enough data). */
+  passes?: (value: number, deal: Deal) => boolean | null
 }
 
 interface Group {
@@ -43,6 +47,26 @@ const GROUPS: Group[] = [
         mode: 'investment',
         get: (_r, d) => d.inputs.propertyArvValue,
         format: formatCurrency,
+      },
+      {
+        label: 'Rehab Budget',
+        mode: 'investment',
+        get: (_r, d) => d.inputs.rehabCost,
+        format: formatCurrency,
+      },
+      {
+        label: 'All-in Cost',
+        mode: 'investment',
+        get: (r) => r.allInCost,
+        format: formatCurrency,
+        better: 'lower',
+      },
+      {
+        label: `Max Offer (${SEVENTY_RULE_PERCENT}% Rule)`,
+        mode: 'investment',
+        get: (r) => r.maxOfferSeventyRule,
+        format: formatCurrency,
+        passes: (max, d) => (d.inputs.propertyValue == null ? null : d.inputs.propertyValue <= max),
       },
       { label: 'Price / sq ft', get: (r) => r.preArvPricePerSqFt, format: formatCurrency, better: 'lower' },
       { label: 'Property Tax / yr', get: (r) => r.annualTaxAtSale, format: formatCurrency, better: 'lower' },
@@ -93,10 +117,33 @@ const GROUPS: Group[] = [
         signed: true,
       },
       {
+        label: 'Cash Flow / mo (Itemized)',
+        mode: 'investment',
+        get: (r) => r.monthlyCashFlowItemized,
+        format: formatCurrency,
+        better: 'higher',
+        signed: true,
+      },
+      {
         label: 'Yearly ROI (50% Rule)',
         mode: 'investment',
         get: (r) => r.roiFiftyRule,
         format: formatPercent,
+        better: 'higher',
+        signed: true,
+      },
+      {
+        label: 'Cash Left After Refi',
+        mode: 'investment',
+        get: (r) => r.cashLeftInDeal,
+        format: formatCurrency,
+        better: 'lower',
+      },
+      {
+        label: 'Cash Flow After Refi (50% Rule)',
+        mode: 'investment',
+        get: (r) => r.cashFlowAfterRefinanceFiftyRule,
+        format: formatCurrency,
         better: 'higher',
         signed: true,
       },
@@ -242,7 +289,7 @@ export function ComparisonTable({
                       {values.map((value, i) => {
                         const tone =
                           row.signed && value != null ? (value < 0 ? 'negative' : 'positive') : ''
-                        const pass = value != null && row.passes ? row.passes(value) : null
+                        const pass = value != null && row.passes ? row.passes(value, deals[i]) : null
                         return (
                           <td
                             key={deals[i].id}

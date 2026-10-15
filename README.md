@@ -2,10 +2,12 @@
 
 A single-page web app for evaluating real estate opportunities in two modes:
 
-- **Investor (rental)** — screen BRRR investments: the 2% rule, cash flow, ROI,
-  appreciation, and mortgage/points analysis.
+- **Investor (rental)** — screen BRRR investments: the 2% and 70% rules, rehab
+  and refinance (cash out, cash left in, return after refi), cash flow from rules
+  of thumb or itemized expenses, ROI, appreciation, and mortgage/points analysis.
 - **Homeowner** — evaluate a home you'd actually live in: equity over time,
-  total cost of ownership, rent-vs-buy, and affordability (front ratio).
+  total cost of ownership (including insurance and PMI), rent-vs-buy, and
+  affordability (front ratio).
 
 Each saved deal has its own mode, so investment screens and home searches can
 coexist and be compared side by side.
@@ -28,8 +30,15 @@ Testing Library.
   behind a collapsed **Advanced Analysis** disclosure.
 - **Two modes per deal** — Investor (rental/BRRR) and Homeowner (own it and live
   in it), toggleable on any deal.
-- **Deal health at a glance** — investor: 2% rule, monthly cash flow, 50%-rule cash
-  flow; homeowner: affordability (28% front ratio) and rent-vs-own savings.
+- **Deal health at a glance** — investor: 2% rule, 70% rule (max offer), monthly
+  cash flow, 50%-rule cash flow; homeowner: affordability (28% front ratio) and
+  rent-vs-own savings.
+- **Rehab & refinance** — enter a rehab budget and (optionally) refinance terms to
+  see all-in cost, the 70% rule max offer, cash invested, cash out at refinance,
+  cash left in the deal, and cash flow / cash-on-cash return after the refinance.
+- **Itemized expenses** — optionally enter vacancy, management, repairs & CapEx
+  (as % of rent) and insurance; an itemized cash flow then appears next to the
+  50%/25% rule estimates and becomes the headline cash-flow figure.
 - **Multiple deals** — deals live in a tab bar; click the name to rename it inline,
   **Duplicate** a deal to try a different scenario, and **Delete** or **Clear all**
   with a one-click **Undo**. Everything is auto-saved to `localStorage` (the header
@@ -65,21 +74,29 @@ Testing Library.
 | Tenant income range | Investor | annual gross rent ÷ 25% and ÷ 30% (rent-to-income screening) |
 | Down payment | Both | `sale price − loan amount`, and as a percent of the sale price |
 | Cash to close | Both | down payment + closing costs |
+| All-in cost | Investor | sale price + rehab + closing costs |
+| 70% rule | Investor | max offer = `ARV × 70% − rehab`; passes when the sale price is at or below it |
+| Cash invested | Investor | down payment + closing costs + rehab |
+| Refinance | Investor | new loan = `ARV × LTV%`; cash out = new loan − purchase loan payoff − refi closing costs; cash left in = cash invested − cash out; payment uses the refi rate and term (30 yrs if empty) |
+| Itemized operating expenses | Investor | `rent × (vacancy + management + repairs & CapEx)%` + insurance/12 + property tax (on the sale price) |
+| Expense ratio | Investor | operating expenses ÷ rent (compare with the 50% rule) |
 | Monthly mortgage payment | Both | standard fixed-rate amortization; a 0% rate uses `principal / months` |
 | Total over term | Both | monthly payment × total months (principal & interest only) |
 | Total interest | Both | total over term − loan amount |
 | Closing costs | Both | your actual cost as % of the loan, plus a 2%–5% estimate range |
 | Points break-even | Both | `points cost ÷ monthly savings` with the lower (pointed) rate |
-| Monthly cash flow | Investor | `rent × k − mortgage − fees`, where `k = 1` (no overhead), `0.5` (50% rule), or `0.75` (25% rule). The rule is applied to **gross rent**; the 50%/25% figures represent assumed operating expenses. |
-| Yearly ROI | Investor | yearly cash flow ÷ cash to close (`down payment + closing costs`) |
+| Monthly cash flow | Investor | `rent × k − mortgage − fees`, where `k = 1` (no overhead), `0.5` (50% rule), or `0.75` (25% rule). The rule is applied to **gross rent**; the 50%/25% figures represent assumed operating expenses. Itemized: `rent − operating expenses − mortgage − fees`. |
+| Yearly ROI | Investor | yearly cash flow ÷ cash invested (`down payment + closing costs + rehab`) |
+| Cash flow after refi | Investor | same formulas with the refinanced payment; itemized when expenses are entered, otherwise the 50% rule. Cash-on-cash = yearly cash flow ÷ cash left in (unlimited when no cash is left in) |
 | Home value over time | Investor | `ARV × (1 + appreciation%)^years`, at 1/5/10/15/20/30-year horizons |
 | Cash flow over time | Investor | cumulative monthly cash flow; the "with appreciation" variant re-prices rent at the appreciation rate starting in year 2, while the mortgage payment stays fixed |
 | Home value over time | Homeowner | same compounding, but from the **purchase price** (ARV is hidden in this mode); charted yearly with equity |
 | Equity over time | Homeowner | projected value − remaining loan balance at each horizon (balance from standard amortization; a cash purchase shows full value) |
-| Monthly ownership cost | Homeowner | mortgage + property tax + fees + **1% of the price per year** as a maintenance reserve |
-| Total cost of ownership | Homeowner | monthly ownership cost × 12 × loan term |
+| PMI | Homeowner | while the loan is over 80% of the price: `loan × PMI rate / 12` (0.5%/yr estimate when empty; 0 disables), ending when the balance amortizes to 78% of the price |
+| Monthly ownership cost | Homeowner | mortgage + property tax + insurance + PMI + fees + **1% of the price per year** as a maintenance reserve |
+| Total cost of ownership | Homeowner | monthly ownership cost × 12 × loan term, counting PMI only for the months it applies |
 | Rent vs buy | Homeowner | `rent you'd otherwise pay − monthly ownership cost`, monthly and cumulative (rent held flat) |
-| Front ratio | Homeowner | PITI (payment + tax + fees) ÷ monthly household income; passes at ≤ **28%** |
+| Front ratio | Homeowner | housing cost (payment + tax + insurance + PMI + fees) ÷ monthly household income; passes at ≤ **28%** |
 
 ## Getting started
 
@@ -123,8 +140,9 @@ src/
 ## Conventions & assumptions
 
 - Inputs are optional. Any missing input simply leaves the dependent results as `—`.
-- The property tax rate defaults to 2.57% and the loan term to 30 years; both can
-  be changed. Under the Property Tax Rate field there is a **greater Seattle rate
+- The property tax rate defaults to the **median greater Seattle rate** in the
+  reference list (0.89% for 2026, computed from the data) and the loan term to 30
+  years; both can be changed. Under the Property Tax Rate field there is a **greater Seattle rate
   reference** (2026 tax year): King County cities show the lowest–highest rate
   across parcels (the "Use" button applies the highest, conservatively) and
   Snohomish County cities show the assessor's "predominant" rate. Sources:
@@ -137,16 +155,21 @@ src/
   County cities (Tacoma, Puyallup, …) are not listed.
 - The down payment percentage is relative to the **sale price**; closing cost
   percentages are relative to the **loan** amount.
-- Cash flow figures are after the mortgage payment and additional monthly fees;
-  they do not include vacancy, repair reserves, or management fees beyond the
-  50%/25% rules.
+- Cash flow figures are after the mortgage payment and other monthly fees. The
+  50%/25% rules stand in for operating expenses; enter itemized expenses for your
+  own numbers. Percent-of-rent expenses apply to gross rent.
+- The refinance assumes the purchase loan is paid off near its original balance
+  (a short rehab) and that rehab is paid in cash. PMI is modeled for homeowner
+  deals only; investment loans usually need 15%+ down, so investor deals offer
+  15/20/25% down picks.
 - **Investor mode** projections start from ARV; **homeowner mode** projections start
   from the purchase price.
 - Ownership costs include a flat **1% of the price per year** as a maintenance
   reserve; property tax is computed from the sale price (no re-assessment modeled).
 - Rent vs buy assumes the rent you'd otherwise pay **stays flat**; appreciation and
-  equity growth are upside not included in the rent column.
-- The affordability check uses the **28% front ratio** (PITI vs gross income); it
-  does not model back ratio (DTI) or down-payment sources.
+  equity growth are upside not included in the rent column. PMI drops out of the
+  cumulative comparison once it ends.
+- The affordability check uses the **28% front ratio** (housing cost vs gross
+  income); it does not model back ratio (DTI) or down-payment sources.
 
 Developed & maintained by Andrei Villasana.

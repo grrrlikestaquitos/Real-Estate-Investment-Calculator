@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Deal, DealInputKey, DealInputs } from '../lib/types'
 import {
+  DEFAULT_PMI_RATE_PERCENT,
+  DEFAULT_REFI_TERM_YEARS,
   downPayment,
   downPaymentPercent,
   loanForDownPayment,
@@ -12,8 +14,18 @@ import { TaxRateReference } from './TaxRateReference'
 
 type FieldStrings = Record<DealInputKey, string>
 
-/** Down payment quick picks, as a percent of the sale price. */
-const DOWN_PAYMENT_PICKS = [3.5, 5, 10, 20, 25] as const
+/**
+ * Down payment quick picks, as a percent of the sale price. Investment loans
+ * usually need 15%+ down; low-down options (FHA, conventional 3–5%) are for homes.
+ */
+const DOWN_PAYMENT_PICKS = {
+  investment: [15, 20, 25],
+  owner: [3.5, 5, 10, 20],
+} as const
+
+const EXPENSE_KEYS: DealInputKey[] = ['vacancyRate', 'managementRate', 'maintenanceRate', 'insuranceAnnual']
+const REFINANCE_KEYS: DealInputKey[] = ['refiLtv', 'refiRate', 'refiTerm', 'refiClosingCost']
+const POINTS_KEYS: DealInputKey[] = ['loanPointRate', 'pointsOffered']
 
 function toFieldStrings(inputs: DealInputs): FieldStrings {
   const out = {} as FieldStrings
@@ -21,6 +33,32 @@ function toFieldStrings(inputs: DealInputs): FieldStrings {
     out[key] = inputs[key] == null ? '' : String(inputs[key])
   }
   return out
+}
+
+/** A collapsible group of optional inputs; starts open when any of them has a value. */
+function OptionalGroup({
+  title,
+  hint,
+  defaultOpen,
+  children,
+}: {
+  title: string
+  hint?: string
+  defaultOpen: boolean
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <details
+      className="input-group input-group-optional"
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
+      <summary>{title}</summary>
+      {hint ? <p className="input-group-hint">{hint}</p> : null}
+      <div className="field-grid">{children}</div>
+    </details>
+  )
 }
 
 interface DealFormProps {
@@ -35,16 +73,21 @@ interface DealFormProps {
 
 export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
   const [fields, setFields] = useState<FieldStrings>(() => toFieldStrings(deal.inputs))
-  const [pointsOpen, setPointsOpen] = useState(
-    deal.inputs.loanPointRate != null || deal.inputs.pointsOffered != null,
-  )
   const isOwner = deal.type === 'owner'
   const { inputs } = deal
+  const anySet = (keys: DealInputKey[]) => keys.some((key) => inputs[key] != null)
 
   function update(key: DealInputKey, raw: string) {
     setFields((prev) => ({ ...prev, [key]: raw }))
     onCommit({ ...inputs, [key]: parseInput(raw) })
   }
+
+  /** Common props for a field bound to an input key. */
+  const bind = (key: DealInputKey) => ({
+    id: key,
+    value: fields[key],
+    onChange: (v: string) => update(key, v),
+  })
 
   const dpAmount = downPayment(inputs)
   const dpPercent = downPaymentPercent(inputs)
@@ -68,57 +111,17 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
         <fieldset className="input-group">
           <legend>Property</legend>
           <div className="field-grid">
-            <Field
-              id="propertyValue"
-              label="Sale Price"
-              prefix="$"
-              grouped
-              value={fields.propertyValue}
-              onChange={(v) => update('propertyValue', v)}
-            />
+            <Field label="Sale Price" prefix="$" grouped {...bind('propertyValue')} />
             {!isOwner ? (
-              <Field
-                id="propertyArvValue"
-                label="ARV / Market Value"
-                prefix="$"
-                grouped
-                value={fields.propertyArvValue}
-                onChange={(v) => update('propertyArvValue', v)}
-              />
+              <>
+                <Field label="ARV / Market Value" prefix="$" grouped {...bind('propertyArvValue')} />
+                <Field label="Rehab Budget" prefix="$" grouped {...bind('rehabCost')} />
+                <Field label="Monthly Rent" prefix="$" suffix="/mo" grouped {...bind('rentValue')} />
+              </>
             ) : null}
-            {!isOwner ? (
-              <Field
-                id="rentValue"
-                label="Monthly Rent"
-                prefix="$"
-                suffix="/mo"
-                grouped
-                value={fields.rentValue}
-                onChange={(v) => update('rentValue', v)}
-              />
-            ) : null}
-            <Field
-              id="propertySize"
-              label="Property Size"
-              suffix="sq ft"
-              grouped
-              value={fields.propertySize}
-              onChange={(v) => update('propertySize', v)}
-            />
-            <Field
-              id="propertyTax"
-              label="Property Tax Rate"
-              suffix="%"
-              value={fields.propertyTax}
-              onChange={(v) => update('propertyTax', v)}
-            />
-            <Field
-              id="appreciationRate"
-              label="Annual Appreciation"
-              suffix="%"
-              value={fields.appreciationRate}
-              onChange={(v) => update('appreciationRate', v)}
-            />
+            <Field label="Property Tax Rate" suffix="%" {...bind('propertyTax')} />
+            <Field label="Annual Appreciation" suffix="%" {...bind('appreciationRate')} />
+            <Field label="Property Size" suffix="sq ft" grouped {...bind('propertySize')} />
           </div>
           <TaxRateReference onUseRate={(percent) => update('propertyTax', String(percent))} />
         </fieldset>
@@ -128,42 +131,24 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
             <legend>Renting &amp; Affordability</legend>
             <div className="field-grid">
               <Field
-                id="rentYouPay"
                 label="Rent You'd Otherwise Pay"
                 prefix="$"
                 suffix="/mo"
                 grouped
-                value={fields.rentYouPay}
-                onChange={(v) => update('rentYouPay', v)}
+                {...bind('rentYouPay')}
               />
-              <Field
-                id="householdIncome"
-                label="Monthly Household Income"
-                prefix="$"
-                grouped
-                value={fields.householdIncome}
-                onChange={(v) => update('householdIncome', v)}
-              />
+              <Field label="Monthly Household Income" prefix="$" grouped {...bind('householdIncome')} />
             </div>
           </fieldset>
         ) : null}
 
         <fieldset className="input-group">
-          <legend>Mortgage</legend>
+          <legend>{isOwner ? 'Mortgage' : 'Purchase Loan'}</legend>
           <div className="field-grid">
-            <Field
-              id="loanValue"
-              label="Loan Amount"
-              prefix="$"
-              grouped
-              wide
-              value={fields.loanValue}
-              onChange={(v) => update('loanValue', v)}
-              hint={loanHint}
-            >
+            <Field label="Loan Amount" prefix="$" grouped wide hint={loanHint} {...bind('loanValue')}>
               {inputs.propertyValue != null && inputs.propertyValue > 0 ? (
                 <div className="chips" role="group" aria-label="Set loan from down payment">
-                  {DOWN_PAYMENT_PICKS.map((pct) => {
+                  {DOWN_PAYMENT_PICKS[deal.type].map((pct) => {
                     const active = dpPercent != null && Math.abs(dpPercent - pct) < 0.05
                     return (
                       <button
@@ -183,62 +168,89 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
                 </div>
               ) : null}
             </Field>
-            <Field
-              id="loanRate"
-              label="Fixed Rate"
-              suffix="%"
-              value={fields.loanRate}
-              onChange={(v) => update('loanRate', v)}
-            />
-            <Field
-              id="loanTerm"
-              label="Loan Term"
-              suffix="yrs"
-              value={fields.loanTerm}
-              onChange={(v) => update('loanTerm', v)}
-            />
-            <Field
-              id="closingCost"
-              label="Closing Costs"
-              prefix="$"
-              grouped
-              value={fields.closingCost}
-              onChange={(v) => update('closingCost', v)}
-            />
-            <Field
-              id="additionalMonthlyFees"
-              label="Other Monthly Fees"
-              prefix="$"
-              suffix="/mo"
-              grouped
-              value={fields.additionalMonthlyFees}
-              onChange={(v) => update('additionalMonthlyFees', v)}
-            />
+            <Field label="Fixed Rate" suffix="%" {...bind('loanRate')} />
+            <Field label="Loan Term" suffix="yrs" {...bind('loanTerm')} />
+            <Field label="Closing Costs" prefix="$" grouped {...bind('closingCost')} />
+            <Field label="Other Monthly Fees" prefix="$" suffix="/mo" grouped {...bind('additionalMonthlyFees')} />
+            {isOwner ? (
+              <>
+                <Field
+                  label="Home Insurance"
+                  prefix="$"
+                  suffix="/yr"
+                  placeholder="e.g. 1,800"
+                  grouped
+                  {...bind('insuranceAnnual')}
+                />
+                <Field
+                  label="PMI Rate"
+                  suffix="%/yr"
+                  placeholder={`Auto ${DEFAULT_PMI_RATE_PERCENT}`}
+                  {...bind('pmiRate')}
+                />
+              </>
+            ) : null}
           </div>
+          {isOwner ? (
+            <p className="input-group-hint input-group-note">
+              PMI applies only under 20% down. Leave it empty for a {DEFAULT_PMI_RATE_PERCENT}%/yr
+              estimate, or enter 0 if your loan has none (e.g. VA).
+            </p>
+          ) : null}
         </fieldset>
 
-        <details
-          className="input-group input-group-optional"
-          open={pointsOpen}
-          onToggle={(e) => setPointsOpen(e.currentTarget.open)}
-        >
-          <summary>Mortgage points (optional)</summary>
-          <div className="field-grid">
-            <Field
-              id="loanPointRate"
-              label="Rate with Points"
-              suffix="%"
-              value={fields.loanPointRate}
-              onChange={(v) => update('loanPointRate', v)}
-            />
-            <Field
-              id="pointsOffered"
-              label="Points Offered"
-              value={fields.pointsOffered}
-              onChange={(v) => update('pointsOffered', v)}
-            />
-          </div>
-        </details>
+        {!isOwner ? (
+          <>
+            <OptionalGroup
+              title="Operating expenses (optional)"
+              hint="Itemize to get a cash flow based on your own numbers instead of the 50%/25% rules. Property tax is included automatically."
+              defaultOpen={anySet(EXPENSE_KEYS)}
+            >
+              <Field label="Vacancy" suffix="% of rent" placeholder="e.g. 5" {...bind('vacancyRate')} />
+              <Field
+                label="Management"
+                suffix="% of rent"
+                placeholder="e.g. 8"
+                {...bind('managementRate')}
+              />
+              <Field
+                label="Repairs & CapEx"
+                suffix="% of rent"
+                placeholder="e.g. 10"
+                {...bind('maintenanceRate')}
+              />
+              <Field
+                label="Insurance"
+                prefix="$"
+                suffix="/yr"
+                placeholder="e.g. 1,500"
+                grouped
+                {...bind('insuranceAnnual')}
+              />
+            </OptionalGroup>
+
+            <OptionalGroup
+              title="Refinance after rehab (optional)"
+              hint="The refinance loan is a share of ARV and pays off the purchase loan."
+              defaultOpen={anySet(REFINANCE_KEYS)}
+            >
+              <Field label="Loan-to-Value" suffix="% of ARV" placeholder="e.g. 75" {...bind('refiLtv')} />
+              <Field label="Refinance Rate" suffix="%" {...bind('refiRate')} />
+              <Field
+                label="Refinance Term"
+                suffix="yrs"
+                placeholder={String(DEFAULT_REFI_TERM_YEARS)}
+                {...bind('refiTerm')}
+              />
+              <Field label="Refi Closing Costs" prefix="$" grouped {...bind('refiClosingCost')} />
+            </OptionalGroup>
+          </>
+        ) : null}
+
+        <OptionalGroup title="Mortgage points (optional)" defaultOpen={anySet(POINTS_KEYS)}>
+          <Field label="Rate with Points" suffix="%" {...bind('loanPointRate')} />
+          <Field label="Points Offered" {...bind('pointsOffered')} />
+        </OptionalGroup>
       </div>
     </section>
   )

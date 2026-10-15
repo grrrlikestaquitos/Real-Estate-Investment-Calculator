@@ -5,6 +5,11 @@ function isNum(v: number | null | undefined): v is number {
   return v != null && Number.isFinite(v)
 }
 
+/** Optional inputs (fees, closing costs, rehab…) count as zero when left empty. */
+function orZero(v: number | null | undefined): number {
+  return isNum(v) ? v : 0
+}
+
 /**
  * Parse free-form user input into a number. Thousands separators, `$` and
  * spaces are ignored ("$320,000" → 320000). Empty or invalid input is null.
@@ -211,15 +216,166 @@ export function monthlyCashFlow(inputs: DealInputs, rentFraction = 1): number | 
   return rent * rentFraction - payment - monthlyFees
 }
 
-/** Yearly cash-flow return on the money put down (down payment + closing costs). */
+/** Yearly cash flow as a percentage of the cash invested; null when nothing was invested. */
+function returnOnCash(monthly: number | null, invested: number | null): number | null {
+  if (!isNum(monthly) || !isNum(invested) || invested <= 0) return null
+  return ((monthly * 12) / invested) * 100
+}
+
+/** Yearly cash-flow return on the cash invested (down payment + closing costs + rehab). */
 export function cashFlowRateOfReturn(inputs: DealInputs, rentFraction = 1): number | null {
-  const cashFlow = monthlyCashFlow(inputs, rentFraction)
+  return returnOnCash(monthlyCashFlow(inputs, rentFraction), cashInvested(inputs))
+}
+
+// ---------------------------------------------------------------------------
+// Itemized operating expenses (investor)
+// ---------------------------------------------------------------------------
+
+/** True once any itemized expense is entered; until then cash flow relies on the 50%/25% rules. */
+export function hasItemizedExpenses(inputs: DealInputs): boolean {
+  return [inputs.vacancyRate, inputs.managementRate, inputs.maintenanceRate, inputs.insuranceAnnual].some(
+    isNum,
+  )
+}
+
+/**
+ * Monthly operating expenses: vacancy, management, and repairs/CapEx as a share
+ * of gross rent, plus insurance and property tax (on the sale price). Null until
+ * rent and at least one itemized expense are entered.
+ */
+export function monthlyOperatingExpenses(inputs: DealInputs): number | null {
+  const { rentValue: rent } = inputs
+  if (!isNum(rent) || !hasItemizedExpenses(inputs)) return null
+  const rentShare =
+    (orZero(inputs.vacancyRate) + orZero(inputs.managementRate) + orZero(inputs.maintenanceRate)) / 100
+  return rent * rentShare + orZero(inputs.insuranceAnnual) / 12 + orZero(monthlyPropertyTax(inputs))
+}
+
+/** Operating expenses as a percentage of gross rent (compare with the 50% rule). */
+export function expenseRatio(inputs: DealInputs): number | null {
+  const opex = monthlyOperatingExpenses(inputs)
+  const { rentValue: rent } = inputs
+  if (!isNum(opex) || !isNum(rent) || rent === 0) return null
+  return (opex / rent) * 100
+}
+
+/** Rent − itemized operating expenses − mortgage payment − other fees. */
+export function monthlyCashFlowItemized(
+  inputs: DealInputs,
+  payment: number | null = monthlyMortgagePayment(inputs.loanValue, inputs.loanRate, inputs.loanTerm),
+): number | null {
+  const opex = monthlyOperatingExpenses(inputs)
+  const { rentValue: rent } = inputs
+  if (!isNum(opex) || !isNum(rent) || !isNum(payment)) return null
+  return rent - opex - payment - orZero(inputs.additionalMonthlyFees)
+}
+
+export type ExpenseBasis = 'itemized' | 'fiftyRule'
+
+/** Itemized expenses once any are entered, otherwise the 50% rule. */
+export function expenseBasis(inputs: DealInputs): ExpenseBasis {
+  return hasItemizedExpenses(inputs) ? 'itemized' : 'fiftyRule'
+}
+
+// ---------------------------------------------------------------------------
+// BRRR: rehab & refinance
+// ---------------------------------------------------------------------------
+
+/** Share of ARV the 70% rule allows for the purchase price plus rehab. */
+export const SEVENTY_RULE_PERCENT = 70
+
+/** Refinance term used when none is entered. */
+export const DEFAULT_REFI_TERM_YEARS = 30
+
+/** Purchase price + rehab + closing costs. */
+export function allInCost(inputs: DealInputs): number | null {
+  const { propertyValue: price } = inputs
+  if (!isNum(price)) return null
+  return price + orZero(inputs.rehabCost) + orZero(inputs.closingCost)
+}
+
+/** Highest purchase price under the 70% rule: ARV × 70% − rehab. */
+export function maxOfferSeventyRule(inputs: DealInputs): number | null {
+  const { propertyArvValue: arv } = inputs
+  if (!isNum(arv)) return null
+  return (arv * SEVENTY_RULE_PERCENT) / 100 - orZero(inputs.rehabCost)
+}
+
+export function passesSeventyRule(inputs: DealInputs): boolean | null {
+  const max = maxOfferSeventyRule(inputs)
+  const { propertyValue: price } = inputs
+  if (!isNum(max) || !isNum(price)) return null
+  return price <= max
+}
+
+/** Cash put into the deal before any refinance: down payment + closing costs + rehab. */
+export function cashInvested(inputs: DealInputs): number | null {
   const dp = downPayment(inputs)
-  const { closingCost } = inputs
-  if (!isNum(cashFlow) || !isNum(dp)) return null
-  const moneyDown = dp + (isNum(closingCost) ? closingCost : 0)
-  if (moneyDown === 0) return null
-  return ((cashFlow * 12) / moneyDown) * 100
+  if (!isNum(dp)) return null
+  return dp + orZero(inputs.closingCost) + orZero(inputs.rehabCost)
+}
+
+/** New loan at refinance: ARV × refinance loan-to-value. */
+export function refinanceLoan(inputs: DealInputs): number | null {
+  const { propertyArvValue: arv, refiLtv } = inputs
+  if (!isNum(arv) || !isNum(refiLtv)) return null
+  return (arv * refiLtv) / 100
+}
+
+export function refinancePayment(inputs: DealInputs): number | null {
+  return monthlyMortgagePayment(
+    refinanceLoan(inputs),
+    inputs.refiRate,
+    inputs.refiTerm ?? DEFAULT_REFI_TERM_YEARS,
+  )
+}
+
+/**
+ * Cash back at the refinance: the new loan, less paying off the purchase loan
+ * (assumed near its original balance after a short rehab) and refi closing costs.
+ * Negative means cash is needed to close the refinance.
+ */
+export function cashOutAtRefinance(inputs: DealInputs): number | null {
+  const refi = refinanceLoan(inputs)
+  const { loanValue } = inputs
+  if (!isNum(refi) || !isNum(loanValue)) return null
+  return refi - loanValue - orZero(inputs.refiClosingCost)
+}
+
+/** Cash still in the deal after the refinance (zero or less: all of it came back out). */
+export function cashLeftInDeal(inputs: DealInputs): number | null {
+  const invested = cashInvested(inputs)
+  const out = cashOutAtRefinance(inputs)
+  if (!isNum(invested) || !isNum(out)) return null
+  return invested - out
+}
+
+/** Equity remaining after the refinance: ARV − refinance loan. */
+export function equityAfterRefinance(inputs: DealInputs): number | null {
+  const refi = refinanceLoan(inputs)
+  const { propertyArvValue: arv } = inputs
+  if (!isNum(refi) || !isNum(arv)) return null
+  return arv - refi
+}
+
+/** Monthly cash flow with the refinanced payment, on the given expense basis. */
+export function cashFlowAfterRefinance(
+  inputs: DealInputs,
+  basis: ExpenseBasis = expenseBasis(inputs),
+): number | null {
+  const payment = refinancePayment(inputs)
+  if (basis === 'itemized') return monthlyCashFlowItemized(inputs, payment)
+  const { rentValue: rent } = inputs
+  if (!isNum(rent) || !isNum(payment)) return null
+  return rent * 0.5 - payment - orZero(inputs.additionalMonthlyFees)
+}
+
+/**
+ * Yearly cash-on-cash return on the cash left in after the refinance. Null when
+ * no cash is left in (an unbounded return) or inputs are missing.
+ */
+export function cashOnCashAfterRefinance(inputs: DealInputs): number | null {
+  return returnOnCash(cashFlowAfterRefinance(inputs), cashLeftInDeal(inputs))
 }
 
 export function cumulativeCashFlowWithoutAppreciation(
@@ -276,6 +432,14 @@ export const MAINTENANCE_RATE_PERCENT = 1
 /** Front-ratio ceiling: PITI as a share of monthly income (28% rule). */
 export const FRONT_RATIO_PASS_PERCENT = 28
 
+/** PMI rate assumed (% of the loan per year) when under 20% down and none is entered. */
+export const DEFAULT_PMI_RATE_PERCENT = 0.5
+
+/** PMI applies while the loan is above 80% of the price… */
+const PMI_REQUIRED_ABOVE_LTV = 80
+/** …and ends automatically once the balance amortizes to 78% of it. */
+const PMI_ENDS_AT_LTV = 78
+
 /**
  * Remaining loan balance after `months` amortized payments.
  * 0 before payments start, 0 at or past the end of the term.
@@ -308,26 +472,64 @@ export function monthlyPropertyTax(inputs: DealInputs): number | null {
   return (propertyValue * propertyTax) / 100 / 12
 }
 
+export function monthlyInsurance(inputs: DealInputs): number | null {
+  return isNum(inputs.insuranceAnnual) ? inputs.insuranceAnnual / 12 : null
+}
+
 /**
- * What it costs per month to own the home: mortgage payment + property tax +
- * additional monthly fees + a ~1% annual maintenance reserve on the price.
+ * Monthly private mortgage insurance while the loan is above 80% of the price
+ * (0 with 20%+ down). Uses the entered rate, or an estimate when it's empty.
+ */
+export function monthlyPmi(inputs: DealInputs): number | null {
+  const { propertyValue: price, loanValue: loan } = inputs
+  if (!isNum(price) || price <= 0 || !isNum(loan)) return null
+  if ((loan / price) * 100 <= PMI_REQUIRED_ABOVE_LTV) return 0
+  return (loan * (inputs.pmiRate ?? DEFAULT_PMI_RATE_PERCENT)) / 100 / 12
+}
+
+/** Months of PMI until the balance amortizes to 78% of the price (capped at the loan term). */
+export function pmiMonths(inputs: DealInputs): number | null {
+  const pmi = monthlyPmi(inputs)
+  const { propertyValue: price, loanValue, loanRate, loanTerm } = inputs
+  if (!isNum(pmi)) return null
+  if (pmi === 0) return 0
+  if (!isNum(price) || !isNum(loanTerm) || loanTerm <= 0) return null
+  const termMonths = Math.round(loanTerm * 12)
+  const threshold = (price * PMI_ENDS_AT_LTV) / 100
+  for (let month = 1; month <= termMonths; month++) {
+    const balance = loanBalanceAfter(loanValue, loanRate, loanTerm, month)
+    if (!isNum(balance)) return null
+    if (balance <= threshold) return month
+  }
+  return termMonths
+}
+
+/**
+ * What it costs per month to own the home today: mortgage payment + property
+ * tax + insurance + PMI + other monthly fees + a ~1% annual maintenance reserve.
  */
 export function monthlyOwnershipCost(inputs: DealInputs): number | null {
   const payment = monthlyMortgagePayment(inputs.loanValue, inputs.loanRate, inputs.loanTerm)
-  const { propertyValue, additionalMonthlyFees: fees } = inputs
+  const { propertyValue } = inputs
   if (!isNum(payment) || !isNum(propertyValue)) return null
-  const tax = monthlyPropertyTax(inputs) ?? 0
-  const monthlyFees = isNum(fees) ? fees : 0
   const maintenance = (propertyValue * MAINTENANCE_RATE_PERCENT) / 100 / 12
-  return payment + tax + monthlyFees + maintenance
+  return (
+    payment +
+    orZero(monthlyPropertyTax(inputs)) +
+    orZero(monthlyInsurance(inputs)) +
+    orZero(monthlyPmi(inputs)) +
+    orZero(inputs.additionalMonthlyFees) +
+    maintenance
+  )
 }
 
-/** Total cost of owning over the full loan term (payment, tax, fees, maintenance). */
+/** Total cost of owning over the loan term, with PMI only for the months it applies. */
 export function costOfOwnership(inputs: DealInputs): number | null {
   const monthly = monthlyOwnershipCost(inputs)
   const { loanTerm } = inputs
   if (!isNum(monthly) || !isNum(loanTerm)) return null
-  return monthly * 12 * loanTerm
+  const pmi = orZero(monthlyPmi(inputs))
+  return (monthly - pmi) * 12 * loanTerm + pmi * orZero(pmiMonths(inputs))
 }
 
 /** Total interest paid over the life of the loan. */
@@ -346,24 +548,31 @@ export function rentVsBuyMonthly(inputs: DealInputs): number | null {
   return rentYouPay - ownership
 }
 
-/** Cumulative savings vs renting over `years`, assuming the rent stays flat. */
+/** Cumulative savings vs renting over `years` (rent held flat; PMI stops when it ends). */
 export function rentVsBuyCumulative(inputs: DealInputs, years: number): number | null {
   const monthly = rentVsBuyMonthly(inputs)
   if (!isNum(monthly) || years <= 0) return null
-  return monthly * 12 * years
+  const pmi = orZero(monthlyPmi(inputs))
+  const months = years * 12
+  const monthsWithoutPmi = Math.max(0, months - orZero(pmiMonths(inputs)))
+  return monthly * months + pmi * monthsWithoutPmi
 }
 
 /**
- * Front ratio: PITI (payment + property tax + additional fees) as a
- * percentage of monthly household income.
+ * Front ratio: housing payment (principal & interest, property tax, insurance,
+ * PMI, and other monthly fees such as HOA) as a percentage of monthly income.
  */
 export function frontRatio(inputs: DealInputs): number | null {
-  const { householdIncome: income, additionalMonthlyFees: fees } = inputs
+  const { householdIncome: income } = inputs
   const payment = monthlyMortgagePayment(inputs.loanValue, inputs.loanRate, inputs.loanTerm)
   if (!isNum(income) || income <= 0 || !isNum(payment)) return null
-  const tax = monthlyPropertyTax(inputs) ?? 0
-  const monthlyFees = isNum(fees) ? fees : 0
-  return ((payment + tax + monthlyFees) / income) * 100
+  const housing =
+    payment +
+    orZero(monthlyPropertyTax(inputs)) +
+    orZero(monthlyInsurance(inputs)) +
+    orZero(monthlyPmi(inputs)) +
+    orZero(inputs.additionalMonthlyFees)
+  return (housing / income) * 100
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +671,28 @@ export interface DealResults {
   rentVsBuyByHorizon: (number | null)[]
   frontRatioPct: number | null
   passesFrontRatio: boolean | null
+  monthlyInsurance: number | null
+  monthlyPmi: number | null
+  pmiMonths: number | null
+  /** Whether the PMI figure is the built-in estimate (no rate entered). */
+  pmiEstimated: boolean
+  expenseBasis: ExpenseBasis
+  monthlyOperatingExpenses: number | null
+  expenseRatioPct: number | null
+  monthlyCashFlowItemized: number | null
+  roiItemized: number | null
+  allInCost: number | null
+  maxOfferSeventyRule: number | null
+  passesSeventyRule: boolean | null
+  cashInvested: number | null
+  refinanceLoan: number | null
+  refinancePayment: number | null
+  cashOutAtRefinance: number | null
+  cashLeftInDeal: number | null
+  equityAfterRefinance: number | null
+  cashFlowAfterRefinance: number | null
+  cashFlowAfterRefinanceFiftyRule: number | null
+  cashOnCashAfterRefinance: number | null
 }
 
 export function computeResults(inputs: DealInputs): DealResults {
@@ -504,6 +735,8 @@ export function computeResults(inputs: DealInputs): DealResults {
     return value - balance
   })
   const frontRatioPct = frontRatio(inputs)
+  const pmi = monthlyPmi(inputs)
+  const cashFlowItemized = monthlyCashFlowItemized(inputs)
 
   return {
     rentToArvRatioPct: rentToArvRatio(inputs),
@@ -565,5 +798,26 @@ export function computeResults(inputs: DealInputs): DealResults {
     frontRatioPct,
     passesFrontRatio:
       frontRatioPct == null ? null : frontRatioPct <= FRONT_RATIO_PASS_PERCENT,
+    monthlyInsurance: monthlyInsurance(inputs),
+    monthlyPmi: pmi,
+    pmiMonths: pmiMonths(inputs),
+    pmiEstimated: isNum(pmi) && pmi > 0 && !isNum(inputs.pmiRate),
+    expenseBasis: expenseBasis(inputs),
+    monthlyOperatingExpenses: monthlyOperatingExpenses(inputs),
+    expenseRatioPct: expenseRatio(inputs),
+    monthlyCashFlowItemized: cashFlowItemized,
+    roiItemized: returnOnCash(cashFlowItemized, cashInvested(inputs)),
+    allInCost: allInCost(inputs),
+    maxOfferSeventyRule: maxOfferSeventyRule(inputs),
+    passesSeventyRule: passesSeventyRule(inputs),
+    cashInvested: cashInvested(inputs),
+    refinanceLoan: refinanceLoan(inputs),
+    refinancePayment: refinancePayment(inputs),
+    cashOutAtRefinance: cashOutAtRefinance(inputs),
+    cashLeftInDeal: cashLeftInDeal(inputs),
+    equityAfterRefinance: equityAfterRefinance(inputs),
+    cashFlowAfterRefinance: cashFlowAfterRefinance(inputs),
+    cashFlowAfterRefinanceFiftyRule: cashFlowAfterRefinance(inputs, 'fiftyRule'),
+    cashOnCashAfterRefinance: cashOnCashAfterRefinance(inputs),
   }
 }

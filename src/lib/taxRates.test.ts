@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_INPUTS } from './types'
 import {
+  REGIONAL_MEDIAN_RATE_PERCENT,
   TAX_RATE_ENTRIES,
   formatRateDisplay,
   perThousandToPercent,
@@ -77,3 +79,16 @@ describe('TAX_RATE_ENTRIES', () => {
     expect(perThousandToPercent(everett.useRatePer1000)).toBe(0.86)
   })
 })
+
+describe('regional default rate', () => {
+  it('is the median city rate, and new deals start with it', () => {
+    // 2026 data: 59 cities from 0.58% to 1.28%
+    expect(REGIONAL_MEDIAN_RATE_PERCENT).toBe(0.89)
+    const percents = TAX_RATE_ENTRIES.map((e) => perThousandToPercent(e.useRatePer1000))
+    expect(percents.filter((p) => p < REGIONAL_MEDIAN_RATE_PERCENT).length).toBeLessThanOrEqual(
+      percents.length / 2,
+    )
+    expect(DEFAULT_INPUTS.propertyTax).toBe(REGIONAL_MEDIAN_RATE_PERCENT)
+  })
+})
+

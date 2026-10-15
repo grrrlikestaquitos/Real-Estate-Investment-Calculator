@@ -43,12 +43,19 @@ export function KeyMetrics({ dealType, inputs, results }: KeyMetricsProps) {
       ? [
           ...common,
           { key: 'arv', label: 'ARV / Market Value', value: formatCurrency(inputs.propertyArvValue) },
-          {
-            key: 'cashflow',
-            label: 'Monthly Cash Flow (25% Rule)',
-            value: formatCurrencyExact(results.monthlyCashFlowTwentyFiveRule),
-            tone: signTone(results.monthlyCashFlowTwentyFiveRule),
-          },
+          results.expenseBasis === 'itemized'
+            ? {
+                key: 'cashflow',
+                label: 'Monthly Cash Flow (Itemized)',
+                value: formatCurrencyExact(results.monthlyCashFlowItemized),
+                tone: signTone(results.monthlyCashFlowItemized),
+              }
+            : {
+                key: 'cashflow',
+                label: 'Monthly Cash Flow (25% Rule)',
+                value: formatCurrencyExact(results.monthlyCashFlowTwentyFiveRule),
+                tone: signTone(results.monthlyCashFlowTwentyFiveRule),
+              },
         ]
       : [
           ...common,

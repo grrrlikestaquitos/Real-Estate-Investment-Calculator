@@ -282,5 +282,63 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Fixed Rate'), '6')
     expect(screen.getByRole('img', { name: /cumulative cash flow/i })).toBeInTheDocument()
   })
+
+  it('models a BRRR deal: 70% rule, rehab, and refinance', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.type(screen.getByLabelText('Sale Price'), '150000')
+    await user.type(screen.getByLabelText('ARV / Market Value'), '250000')
+    await user.type(screen.getByLabelText('Rehab Budget'), '30000')
+    await user.type(screen.getByLabelText('Monthly Rent'), '2200')
+    await user.type(screen.getByLabelText('Loan Amount'), '120000')
+    await user.type(screen.getByLabelText('Fixed Rate'), '10')
+    await user.type(screen.getByLabelText('Closing Costs'), '5000')
+
+    // 250k × 70% − 30k rehab = 145k max offer, so 150k fails
+    expect(screen.getByText('Max offer $145,000')).toBeInTheDocument()
+    expect(screen.getByText('Price is above 70% of ARV minus rehab')).toBeInTheDocument()
+    expect(screen.getByText(/Enter ARV and the refinance terms/)).toBeInTheDocument()
+
+    await user.click(screen.getByText('Refinance after rehab (optional)'))
+    await user.type(screen.getByLabelText('Loan-to-Value'), '75')
+    await user.type(screen.getByLabelText('Refinance Rate'), '7')
+    await user.type(screen.getByLabelText('Refi Closing Costs'), '4000')
+
+    const row = (label: RegExp) => screen.getByText(label, { selector: '.stat-label' }).closest('.stat-row') as HTMLElement
+    // 30k down + 5k closing + 30k rehab in; 187.5k − 120k − 4k out
+    expect(within(row(/^Cash Invested/)).getByText('$65,000')).toBeInTheDocument()
+    expect(within(row(/^Cash Out at Refinance/)).getByText('$63,500')).toBeInTheDocument()
+    expect(within(row(/^Cash Left in Deal/)).getByText('$1,500')).toBeInTheDocument()
+  })
+
+  it('switches to itemized cash flow once operating expenses are entered', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    expect(screen.getByText('Monthly Cash Flow (25% Rule)', { selector: '.key-metric-label' })).toBeInTheDocument()
+
+    await user.click(screen.getByText('Operating expenses (optional)'))
+    await user.type(screen.getByLabelText('Vacancy'), '5')
+    expect(screen.getByText('Monthly Cash Flow (Itemized)', { selector: '.key-metric-label' })).toBeInTheDocument()
+    expect(screen.getByText('Expense Ratio (% of Rent)')).toBeInTheDocument()
+  })
+
+  it('adds estimated PMI for homeowners under 20% down', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    // Investors get investment-loan picks; homeowners get low-down options
+    expect(screen.queryByRole('button', { name: '3.5% down' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Homeowner' }))
+
+    await user.type(screen.getByLabelText('Sale Price'), '400000')
+    await user.type(screen.getByLabelText('Fixed Rate'), '6')
+    await user.click(screen.getByRole('button', { name: '5% down' }))
+
+    // 380k × 0.5% / 12
+    const pmi = screen.getByText(/^PMI \(est\. 0\.5%\/yr\), ends ~year \d+$/).closest('.stat-row') as HTMLElement
+    expect(within(pmi).getByText('$158.33')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '20% down' }))
+    expect(screen.getByText('None (20%+ down)')).toBeInTheDocument()
+  })
 })
 

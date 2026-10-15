@@ -110,6 +110,17 @@ export function perThousandToPercent(ratePer1000: number): number {
 }
 
 /** Human-readable rate for an entry, e.g. "0.99% – 1.22%" or "0.86%". */
+/**
+ * Median of the rates the "Use" button applies, across every listed city
+ * (as a percent, 2 decimals). New deals start with this as their tax rate.
+ */
+export const REGIONAL_MEDIAN_RATE_PERCENT: number = (() => {
+  const rates = TAX_RATE_ENTRIES.map((e) => e.useRatePer1000).sort((a, b) => a - b)
+  const mid = Math.floor(rates.length / 2)
+  const median = rates.length % 2 ? rates[mid] : (rates[mid - 1] + rates[mid]) / 2
+  return perThousandToPercent(median)
+})()
+
 export function formatRateDisplay(entry: TaxRateEntry): string {
   const max = perThousandToPercent(entry.rateMaxPer1000).toFixed(2)
   if (entry.rateMinPer1000 == null || entry.rateMinPer1000 === entry.rateMaxPer1000) {

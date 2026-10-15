@@ -36,6 +36,23 @@ import {
   yearlyProjection,
   totalInterest,
   totalLoanPayments,
+  allInCost,
+  cashFlowAfterRefinance,
+  cashInvested,
+  cashLeftInDeal,
+  cashOnCashAfterRefinance,
+  cashOutAtRefinance,
+  equityAfterRefinance,
+  expenseBasis,
+  expenseRatio,
+  maxOfferSeventyRule,
+  monthlyCashFlowItemized,
+  monthlyOperatingExpenses,
+  monthlyPmi,
+  passesSeventyRule,
+  pmiMonths,
+  refinanceLoan,
+  refinancePayment,
 } from './calculations'
 
 function deal(over: Partial<DealInputs> = {}): DealInputs {
@@ -379,6 +396,7 @@ describe('loanBalanceAfter', () => {
 })
 
 describe('cost of ownership', () => {
+  // 100% financed; PMI is switched off here and covered in its own tests below
   const inputs = deal({
     propertyValue: 200000,
     propertyTax: 2.57,
@@ -386,6 +404,7 @@ describe('cost of ownership', () => {
     loanRate: 6,
     loanTerm: 30,
     additionalMonthlyFees: 100,
+    pmiRate: 0,
   })
 
   it('monthly cost = payment + tax + fees + 1% maintenance', () => {
@@ -448,11 +467,19 @@ describe('front ratio', () => {
     loanRate: 6,
     loanTerm: 30,
     additionalMonthlyFees: 100,
+    pmiRate: 0,
   }
 
   it('PITI as a percent of monthly income', () => {
     const pit = (monthlyMortgagePayment(200000, 6, 30) as number) + (200000 * 2.57) / 100 / 12 + 100
     expect(frontRatio(deal({ ...base, householdIncome: 8000 }))).toBeCloseTo((pit / 8000) * 100, 6)
+  })
+
+  it('includes insurance and PMI in the housing payment', () => {
+    const withExtras = deal({ ...base, householdIncome: 8000, insuranceAnnual: 1200, pmiRate: 0.6 })
+    const pit = (monthlyMortgagePayment(200000, 6, 30) as number) + (200000 * 2.57) / 100 / 12 + 100
+    const extras = 100 + (200000 * 0.006) / 12
+    expect(frontRatio(withExtras)).toBeCloseTo(((pit + extras) / 8000) * 100, 6)
   })
 
   it('returns null for missing or non-positive income', () => {
@@ -601,6 +628,156 @@ describe('yearlyProjection', () => {
     const flat = yearlyProjection({ ...inputs, appreciationRate: null })
     expect(flat[5].cashFlow).not.toBeNull()
     expect(flat[5].cashFlowWithAppreciation).toBeNull()
+  })
+})
+
+describe('PMI', () => {
+  const home = deal({ propertyValue: 400000, loanValue: 380000, loanRate: 6, loanTerm: 30 })
+
+  it('estimates 0.5% of the loan per year when under 20% down', () => {
+    expect(monthlyPmi(home)).toBeCloseTo((380000 * 0.005) / 12, 6)
+    expect(monthlyPmi({ ...home, pmiRate: 0.8 })).toBeCloseTo((380000 * 0.008) / 12, 6)
+    expect(monthlyPmi({ ...home, pmiRate: 0 })).toBe(0)
+  })
+
+  it('is zero with 20% or more down', () => {
+    expect(monthlyPmi({ ...home, loanValue: 320000 })).toBe(0)
+    expect(pmiMonths({ ...home, loanValue: 320000 })).toBe(0)
+  })
+
+  it('ends when the balance amortizes to 78% of the price', () => {
+    const months = pmiMonths(home) as number
+    expect(months).toBeGreaterThan(0)
+    expect(months).toBeLessThan(360)
+    // 78% of 400k = 312k: the balance crosses it in that month, not before
+    const balanceAt = (m: number) => loanBalanceAfter(380000, 6, 30, m) as number
+    expect(balanceAt(months)).toBeLessThanOrEqual(312000)
+    expect(balanceAt(months - 1)).toBeGreaterThan(312000)
+  })
+
+  it('only charges PMI for the months it applies over the term', () => {
+    const monthly = monthlyOwnershipCost(home) as number
+    const pmi = monthlyPmi(home) as number
+    const months = pmiMonths(home) as number
+    expect(costOfOwnership(home)).toBeCloseTo((monthly - pmi) * 360 + pmi * months, 6)
+  })
+
+  it('is null without a price or loan', () => {
+    expect(monthlyPmi(deal({ loanValue: 380000 }))).toBeNull()
+    expect(pmiMonths(deal({ propertyValue: 400000 }))).toBeNull()
+  })
+})
+
+describe('itemized operating expenses', () => {
+  const rental = deal({
+    propertyValue: 200000,
+    propertyTax: 1.2,
+    rentValue: 2000,
+    loanValue: 160000,
+    loanRate: 6,
+    loanTerm: 30,
+    additionalMonthlyFees: 50,
+    vacancyRate: 5,
+    managementRate: 8,
+    maintenanceRate: 10,
+    insuranceAnnual: 1200,
+  })
+  // 23% of rent + insurance + tax on the sale price
+  const opex = 2000 * 0.23 + 100 + (200000 * 0.012) / 12
+
+  it('sums rent-based expenses, insurance, and property tax', () => {
+    expect(monthlyOperatingExpenses(rental)).toBeCloseTo(opex, 6)
+    expect(expenseRatio(rental)).toBeCloseTo((opex / 2000) * 100, 6)
+  })
+
+  it('computes itemized cash flow after mortgage and fees', () => {
+    const payment = monthlyMortgagePayment(160000, 6, 30) as number
+    expect(monthlyCashFlowItemized(rental)).toBeCloseTo(2000 - opex - payment - 50, 6)
+  })
+
+  it('stays off until an expense is entered', () => {
+    const none = { ...rental, vacancyRate: null, managementRate: null, maintenanceRate: null, insuranceAnnual: null }
+    expect(expenseBasis(none)).toBe('fiftyRule')
+    expect(monthlyOperatingExpenses(none)).toBeNull()
+    expect(monthlyCashFlowItemized(none)).toBeNull()
+    expect(expenseBasis(rental)).toBe('itemized')
+    // A single expense is enough to switch to the itemized basis
+    expect(monthlyOperatingExpenses({ ...none, insuranceAnnual: 1200 })).toBeCloseTo(
+      100 + (200000 * 0.012) / 12,
+      6,
+    )
+  })
+})
+
+describe('BRRR: rehab and refinance', () => {
+  const brrr = deal({
+    propertyValue: 150000,
+    propertyArvValue: 250000,
+    rehabCost: 30000,
+    closingCost: 5000,
+    loanValue: 120000,
+    loanRate: 10,
+    loanTerm: 30,
+    rentValue: 2200,
+    refiLtv: 75,
+    refiRate: 7,
+    refiClosingCost: 4000,
+  })
+
+  it('applies the 70% rule to ARV minus rehab', () => {
+    expect(allInCost(brrr)).toBe(185000)
+    // 250k × 70% − 30k rehab = 145k, so paying 150k fails
+    expect(maxOfferSeventyRule(brrr)).toBe(145000)
+    expect(passesSeventyRule(brrr)).toBe(false)
+    expect(passesSeventyRule({ ...brrr, propertyValue: 145000 })).toBe(true)
+    expect(passesSeventyRule({ ...brrr, propertyArvValue: null })).toBeNull()
+  })
+
+  it('tracks cash in, cash out, and cash left after the refinance', () => {
+    // in: 30k down + 5k closing + 30k rehab
+    expect(cashInvested(brrr)).toBe(65000)
+    expect(refinanceLoan(brrr)).toBe(187500)
+    // 187.5k new loan − 120k payoff − 4k refi closing
+    expect(cashOutAtRefinance(brrr)).toBe(63500)
+    expect(cashLeftInDeal(brrr)).toBe(1500)
+    expect(equityAfterRefinance(brrr)).toBe(62500)
+  })
+
+  it('uses the refinanced payment for cash flow and cash-on-cash return', () => {
+    const payment = monthlyMortgagePayment(187500, 7, 30) as number
+    expect(refinancePayment(brrr)).toBeCloseTo(payment, 6)
+    const cashFlow = 2200 * 0.5 - payment
+    expect(cashFlowAfterRefinance(brrr)).toBeCloseTo(cashFlow, 6)
+    expect(cashOnCashAfterRefinance(brrr)).toBeCloseTo(((cashFlow * 12) / 1500) * 100, 6)
+  })
+
+  it('defaults the refinance term to 30 years', () => {
+    expect(refinancePayment({ ...brrr, refiTerm: 15 })).toBeCloseTo(
+      monthlyMortgagePayment(187500, 7, 15) as number,
+      6,
+    )
+    expect(refinancePayment(brrr)).toBeCloseTo(monthlyMortgagePayment(187500, 7, 30) as number, 6)
+  })
+
+  it('has no cash-on-cash return once all cash is pulled out', () => {
+    const allOut = { ...brrr, refiLtv: 80 }
+    expect(cashLeftInDeal(allOut)).toBeLessThan(0)
+    expect(cashOnCashAfterRefinance(allOut)).toBeNull()
+  })
+
+  it('switches to itemized cash flow after refi when expenses are entered', () => {
+    const itemized = { ...brrr, vacancyRate: 5 }
+    const payment = refinancePayment(itemized) as number
+    const tax = (150000 * (DEFAULT_INPUTS.propertyTax as number)) / 100 / 12 // default rate, on the sale price
+    expect(cashFlowAfterRefinance(itemized)).toBeCloseTo(2200 - 2200 * 0.05 - tax - payment, 6)
+    expect(cashFlowAfterRefinance(itemized, 'fiftyRule')).toBeCloseTo(2200 * 0.5 - payment, 6)
+  })
+
+  it('counts rehab in the cash return on investment', () => {
+    const before = cashFlowRateOfReturn({ ...brrr, rehabCost: null }) as number
+    const after = cashFlowRateOfReturn(brrr) as number
+    expect(after).toBeLessThan(before)
+    expect(after).toBeCloseTo(((monthlyCashFlow(brrr) as number) * 12 / 65000) * 100, 6)
   })
 })
 
