@@ -1,68 +1,152 @@
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+# Real Estate Investment Calculator (BRRR)
 
-## Available Scripts
+A single-page web app for evaluating real estate opportunities in two modes:
 
-In the project directory, you can run:
+- **Investor (rental)** — screen BRRR investments: the 2% rule, cash flow, ROI,
+  appreciation, and mortgage/points analysis.
+- **Homeowner** — evaluate a home you'd actually live in: equity over time,
+  total cost of ownership, rent-vs-buy, and affordability (front ratio).
 
-### `yarn start`
+Each saved deal has its own mode, so investment screens and home searches can
+coexist and be compared side by side.
 
-Runs the app in the development mode.<br />
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+Built with React + TypeScript, bundled with Vite, and tested with Vitest +
+Testing Library.
 
-The page will reload if you make edits.<br />
-You will also see any lint errors in the console.
+## Features
 
-### `yarn test`
+- **Live results** — every metric recomputes as you type; unavailable values show `—`
+  instead of `NaN`.
+- **Fast input** — dollar amounts get thousands separators as you type (`320,000`),
+  the form is a compact two-column grid, and **down payment quick picks** (3.5%–25%)
+  fill in the loan amount from the sale price. Mortgage points are tucked into an
+  optional, collapsible group.
+- **Streamlined layout** — on wide screens the inputs sit in a sticky, scrollable left
+  column while results fill the right; verdict cards show the actual numbers behind
+  each rule, a **key numbers** strip surfaces the metrics that matter most, and
+  secondary analysis (points, tenant screening, multi-year projections) is tucked
+  behind a collapsed **Advanced Analysis** disclosure.
+- **Two modes per deal** — Investor (rental/BRRR) and Homeowner (own it and live
+  in it), toggleable on any deal.
+- **Deal health at a glance** — investor: 2% rule, monthly cash flow, 50%-rule cash
+  flow; homeowner: affordability (28% front ratio) and rent-vs-own savings.
+- **Multiple deals** — deals live in a tab bar; click the name to rename it inline,
+  **Duplicate** a deal to try a different scenario, and **Delete** or **Clear all**
+  with a one-click **Undo**. Everything is auto-saved to `localStorage` (the header
+  shows the save status), so a refresh keeps your work.
+- **Backups** — **Export** downloads all deals as a JSON file; **Import** restores
+  or merges one (deals with the same id are replaced, new ones are added).
+- **Comparison view** — with two or more deals, **Compare** opens a side-by-side
+  table grouped into purchase, financing, rental returns, and living-there metrics.
+  Check or uncheck deals to choose which ones are compared (remembered between
+  visits). The best value in each row is highlighted, 2% and 28% rules show
+  Pass/Fail badges, and rows that don't apply to any compared deal are hidden.
+- **Charts over time** — homeowner deals chart home value and equity, investor
+  deals chart cumulative cash flow (rent held flat vs. growing with appreciation),
+  year by year over 30 years. Hover (or focus the chart and use the arrow keys) to
+  read any year; each chart has a **View as table** fallback.
+- **Light & dark themes** — follows the OS setting until you pick one with the
+  sun/moon button in the header; the choice is remembered.
+- **Shareable links** — "Copy Link" encodes the deal into the URL hash; opening the
+  link anywhere (even in a different browser) recreates the deal with its inputs.
+- **Property tax rate reference** — a collapsible table of 2026 total property tax
+  rates for 59 greater Seattle area cities (King + Snohomish counties, official
+  county assessor publications); one click fills the Property Tax Rate input.
 
-Launches the test runner in the interactive watch mode.<br />
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## What it calculates
 
-### `yarn build`
+| Metric | Mode | Formula / convention |
+| --- | --- | --- |
+| Rent / ARV ratio | Investor | `rent / ARV × 100`; passes the **2% rule** at ≥ 2% |
+| ARV difference | Investor | `ARV − sale price`, in dollars and percent |
+| Price per sq ft | Both | sale price (and ARV) divided by square footage |
+| Annual property tax | Both | `value × tax rate%` |
+| Optimal rent range | Investor | 1%–2% of ARV (the 1%–2% rule) |
+| Tenant income range | Investor | annual gross rent ÷ 25% and ÷ 30% (rent-to-income screening) |
+| Down payment | Both | `sale price − loan amount`, and as a percent of the sale price |
+| Cash to close | Both | down payment + closing costs |
+| Monthly mortgage payment | Both | standard fixed-rate amortization; a 0% rate uses `principal / months` |
+| Total over term | Both | monthly payment × total months (principal & interest only) |
+| Total interest | Both | total over term − loan amount |
+| Closing costs | Both | your actual cost as % of the loan, plus a 2%–5% estimate range |
+| Points break-even | Both | `points cost ÷ monthly savings` with the lower (pointed) rate |
+| Monthly cash flow | Investor | `rent × k − mortgage − fees`, where `k = 1` (no overhead), `0.5` (50% rule), or `0.75` (25% rule). The rule is applied to **gross rent**; the 50%/25% figures represent assumed operating expenses. |
+| Yearly ROI | Investor | yearly cash flow ÷ cash to close (`down payment + closing costs`) |
+| Home value over time | Investor | `ARV × (1 + appreciation%)^years`, at 1/5/10/15/20/30-year horizons |
+| Cash flow over time | Investor | cumulative monthly cash flow; the "with appreciation" variant re-prices rent at the appreciation rate starting in year 2, while the mortgage payment stays fixed |
+| Home value over time | Homeowner | same compounding, but from the **purchase price** (ARV is hidden in this mode); charted yearly with equity |
+| Equity over time | Homeowner | projected value − remaining loan balance at each horizon (balance from standard amortization; a cash purchase shows full value) |
+| Monthly ownership cost | Homeowner | mortgage + property tax + fees + **1% of the price per year** as a maintenance reserve |
+| Total cost of ownership | Homeowner | monthly ownership cost × 12 × loan term |
+| Rent vs buy | Homeowner | `rent you'd otherwise pay − monthly ownership cost`, monthly and cumulative (rent held flat) |
+| Front ratio | Homeowner | PITI (payment + tax + fees) ÷ monthly household income; passes at ≤ **28%** |
 
-Builds the app for production to the `build` folder.<br />
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Getting started
 
-The build is minified and the filenames include the hashes.<br />
-Your app is ready to be deployed!
+```bash
+yarn install
+yarn dev        # start the dev server (http://localhost:5173)
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Scripts
 
-### `yarn eject`
+| Command | Description |
+| --- | --- |
+| `yarn dev` | Start the dev server with hot reload |
+| `yarn build` | Type-check and build the production bundle to `dist/` |
+| `yarn preview` | Serve the production build locally |
+| `yarn test` | Run the test suite once |
+| `yarn test:watch` | Run tests in watch mode |
+| `yarn lint` | Lint with oxlint |
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+## Project structure
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```
+src/
+  lib/
+    types.ts          Deal model + default inputs
+    calculations.ts   Pure metric functions (no React, fully unit-tested)
+    storage.ts        localStorage persistence, shareable-link codec, JSON backups
+    clipboard.ts      Clipboard helper
+    format.ts         Currency/percent formatting + live digit grouping for inputs
+    chart.ts          Axis tick helper for the SVG charts
+    taxRates.ts       Greater Seattle 2026 property tax rates (reference data)
+  hooks/
+    useDeals.ts       Deal state: create/duplicate/rename/delete/restore/import + persistence
+    useToast.ts       Transient messages with an optional Undo action
+    useTheme.ts       Light/dark theme (OS default, saved override)
+    useCompareSelection.ts  Which deals the comparison includes
+  components/         UI building blocks (fields, cards, tables, indicators)
+  App.tsx             Page layout
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (Webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+## Conventions & assumptions
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+- Inputs are optional. Any missing input simply leaves the dependent results as `—`.
+- The property tax rate defaults to 2.57% and the loan term to 30 years; both can
+  be changed. Under the Property Tax Rate field there is a **greater Seattle rate
+  reference** (2026 tax year): King County cities show the lowest–highest rate
+  across parcels (the "Use" button applies the highest, conservatively) and
+  Snohomish County cities show the assessor's "predominant" rate. Sources:
+  [King County Assessor — 2026 Property Tax Levy Rate
+  Distribution](https://cdn.kingcounty.gov/-/media/king-county/depts/assessor/buildings-property/reports/annual-reports/2026/26levydistricts.ashx)
+  and [Snohomish County Assessor — 2026 Property Tax
+  Information](https://www.snohomishcountywa.gov/DocumentCenter/View/141983/Press-Release-Jan-30-2026).
+  Rates are approximations for budgeting; a specific parcel's rate can differ
+  (fire/school district boundaries), so verify with the county assessor. Pierce
+  County cities (Tacoma, Puyallup, …) are not listed.
+- The down payment percentage is relative to the **sale price**; closing cost
+  percentages are relative to the **loan** amount.
+- Cash flow figures are after the mortgage payment and additional monthly fees;
+  they do not include vacancy, repair reserves, or management fees beyond the
+  50%/25% rules.
+- **Investor mode** projections start from ARV; **homeowner mode** projections start
+  from the purchase price.
+- Ownership costs include a flat **1% of the price per year** as a maintenance
+  reserve; property tax is computed from the sale price (no re-assessment modeled).
+- Rent vs buy assumes the rent you'd otherwise pay **stays flat**; appreciation and
+  equity growth are upside not included in the rent column.
+- The affordability check uses the **28% front ratio** (PITI vs gross income); it
+  does not model back ratio (DTI) or down-payment sources.
 
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: https://facebook.github.io/create-react-app/docs/code-splitting
-
-### Analyzing the Bundle Size
-
-This section has moved here: https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size
-
-### Making a Progressive Web App
-
-This section has moved here: https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app
-
-### Advanced Configuration
-
-This section has moved here: https://facebook.github.io/create-react-app/docs/advanced-configuration
-
-### Deployment
-
-This section has moved here: https://facebook.github.io/create-react-app/docs/deployment
-
-### `yarn build` fails to minify
-
-This section has moved here: https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify
+Developed & maintained by Andrei Villasana.
