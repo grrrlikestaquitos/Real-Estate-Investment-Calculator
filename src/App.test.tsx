@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
 describe('App', () => {
@@ -339,6 +339,83 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '20% down' }))
     expect(screen.getByText('None (20%+ down)')).toBeInTheDocument()
+  })
+})
+
+describe('phone summary bar', () => {
+  const originalMatchMedia = window.matchMedia
+  const scrollIntoView = vi.fn()
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    window.history.replaceState(null, '', '/')
+    // A phone-sized screen: the stacked layout's media query matches
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('max-width: 960px'),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia
+    Element.prototype.scrollIntoView = scrollIntoView
+  })
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia
+    // jsdom has no scrollIntoView; remove the mock so other tests see the same environment
+    delete (Element.prototype as Partial<Element>).scrollIntoView
+    scrollIntoView.mockReset()
+  })
+
+  const bar = () => screen.getByRole('complementary', { name: 'Results summary' })
+
+  it('keeps headline numbers and rule checks in view while typing', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    expect(within(bar()).getByText('Payment / mo')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Sale Price'), '200000')
+    await user.type(screen.getByLabelText('ARV / Market Value'), '250000')
+    await user.type(screen.getByLabelText('Monthly Rent'), '2000')
+    await user.type(screen.getByLabelText('Loan Amount'), '160000')
+    await user.type(screen.getByLabelText('Fixed Rate'), '6')
+
+    // 160k at 6% over 30 years
+    expect(within(bar()).getByText('$959')).toBeInTheDocument()
+    // 2000 / 250000 = 0.8%: below the 2% rule; 200k is above 70% × 250k = 175k
+    expect(within(bar()).getByText(/^2%/).closest('.rule-pill')).toHaveClass('rule-pill-bad')
+    expect(within(bar()).getByText(/^70%/).closest('.rule-pill')).toHaveClass('rule-pill-bad')
+    // 2000 × 0.5 − 959 ≥ 0
+    expect(within(bar()).getByText(/^50%/).closest('.rule-pill')).toHaveClass('rule-pill-ok')
+  })
+
+  it('shows homeowner checks and scrolls to the full results', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('radio', { name: 'Homeowner' }))
+    expect(within(bar()).getByText('Monthly cost')).toBeInTheDocument()
+    expect(within(bar()).getByText(/^28%/)).toBeInTheDocument()
+    expect(within(bar()).getByText(/^Rent/)).toBeInTheDocument()
+
+    await user.click(within(bar()).getByRole('button', { name: /show full results/i }))
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView.mock.contexts[0]).toHaveClass('layout-results')
+  })
+
+  it('is hidden in the comparison view and on wide screens', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<App />)
+    await user.click(screen.getByRole('button', { name: /new deal/i }))
+    await user.click(screen.getByRole('button', { name: /^compare/i }))
+    expect(screen.queryByRole('complementary', { name: 'Results summary' })).not.toBeInTheDocument()
+    unmount()
+
+    window.matchMedia = originalMatchMedia
+    render(<App />)
+    expect(screen.queryByRole('complementary', { name: 'Results summary' })).not.toBeInTheDocument()
   })
 })
 

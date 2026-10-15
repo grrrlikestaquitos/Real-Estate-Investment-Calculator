@@ -54,6 +54,11 @@ Testing Library.
   deals chart cumulative cash flow (rent held flat vs. growing with appreciation),
   year by year over 30 years. Hover (or focus the chart and use the arrow keys) to
   read any year; each chart has a **View as table** fallback.
+- **Phone summary bar** — on phones and tablets, where results sit below the form,
+  a bar pinned to the bottom of the screen shows the payment, cash flow (or monthly
+  cost), and pass/fail checks for the key rules while you type. It stays above the
+  on-screen keyboard, hides once the results scroll into view, and tapping it
+  jumps to the full results.
 - **Light & dark themes** — follows the OS setting until you pick one with the
   sun/moon button in the header; the choice is remembered.
 - **Shareable links** — "Copy Link" encodes the deal into the URL hash; opening the
@@ -133,6 +138,7 @@ src/
     useToast.ts       Transient messages with an optional Undo action
     useTheme.ts       Light/dark theme (OS default, saved override)
     useCompareSelection.ts  Which deals the comparison includes
+    useViewport.ts    Media queries, on-screen keyboard inset, in-view tracking
   components/         UI building blocks (fields, cards, tables, indicators)
   App.tsx             Page layout
 ```

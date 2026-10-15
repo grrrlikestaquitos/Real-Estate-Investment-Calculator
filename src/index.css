@@ -1452,6 +1452,139 @@ td.negative {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Phone summary bar                                                          */
+/* -------------------------------------------------------------------------- */
+
+.summary-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--tabs-bg);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.16);
+  animation: summary-in 0.18s ease-out;
+}
+
+@keyframes summary-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+.summary-bar-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2px 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.summary-metric {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.summary-metric-label {
+  overflow: hidden;
+  font-size: 0.64rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.summary-metric-value {
+  font-size: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.summary-metric-value.positive {
+  color: var(--positive);
+}
+
+.summary-metric-value.negative {
+  color: var(--negative);
+}
+
+.summary-rules {
+  display: flex;
+  gap: 3px;
+}
+
+.rule-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rule-pill-ok {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.rule-pill-bad {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.summary-chevron {
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 0 2px 3px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(45deg);
+}
+
+/* The whole bar is the tap target; drop the chevron where every pixel counts. */
+@media (max-width: 370px) {
+  .summary-bar-button {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .summary-chevron {
+    display: none;
+  }
+}
+
+/* Room so the bar never covers the last inputs or the footer, and toasts sit above it. */
+.app-with-summary {
+  padding-bottom: 64px;
+}
+
+.app-with-summary .toast-region {
+  bottom: 80px;
+}
+
+.layout-results {
+  scroll-margin-top: calc(var(--tabs-height) + 12px);
+}
+
+/* -------------------------------------------------------------------------- */
 /* Toast                                                                      */
 /* -------------------------------------------------------------------------- */
 

@@ -3,6 +3,7 @@ import pkg from '../package.json'
 import { useCompareSelection } from './hooks/useCompareSelection'
 import { useDeals } from './hooks/useDeals'
 import { useTheme } from './hooks/useTheme'
+import { useInView, useKeyboardInset, useMediaQuery } from './hooks/useViewport'
 import { useToast } from './hooks/useToast'
 import {
   DEFAULT_PMI_RATE_PERCENT,
@@ -28,6 +29,7 @@ import { KeyMetrics } from './components/KeyMetrics'
 import { LineChart } from './components/LineChart'
 import { Section } from './components/Section'
 import { StatRow } from './components/StatRow'
+import { SummaryBar } from './components/SummaryBar'
 import { Toast } from './components/Toast'
 import { YearGrid } from './components/YearGrid'
 
@@ -59,6 +61,22 @@ export default function App() {
   const importRef = useRef<HTMLInputElement>(null)
 
   const comparing = view === 'compare' && deals.deals.length >= 2
+
+  // Phones and tablets stack results under the form: pin a summary to the
+  // bottom while the form is on screen and the results are not.
+  const formRef = useRef<HTMLDivElement>(null)
+  const resultsRef = useRef<HTMLDivElement>(null)
+  const stacked = useMediaQuery('(max-width: 960px)')
+  const summaryEnabled = stacked && !comparing
+  const formInView = useInView(formRef, summaryEnabled)
+  const resultsInView = useInView(resultsRef, summaryEnabled)
+  const showSummary = summaryEnabled && formInView !== false && resultsInView !== true
+  const keyboardInset = useKeyboardInset()
+
+  function scrollToResults() {
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    resultsRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+  }
 
   function openDeal(id: string) {
     setNewDealId(null)
@@ -202,7 +220,7 @@ export default function App() {
   )
 
   return (
-    <div className="app">
+    <div className={`app ${showSummary ? 'app-with-summary' : ''}`}>
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
@@ -296,7 +314,7 @@ export default function App() {
             />
 
             <div className="layout">
-              <div className="layout-side">
+              <div className="layout-side" ref={formRef}>
                 <DealForm
                   key={`${activeDeal.id}:${formRevision}`}
                   deal={activeDeal}
@@ -305,7 +323,7 @@ export default function App() {
                 />
               </div>
 
-              <div className="layout-results">
+              <div className="layout-results" ref={resultsRef}>
                 <DealIndicators dealType={activeDeal.type} results={results} />
                 <KeyMetrics dealType={activeDeal.type} inputs={activeDeal.inputs} results={results} />
 
@@ -711,6 +729,15 @@ export default function App() {
           Developed &amp; maintained by Andrei Villasana · v{pkg.version}
         </p>
       </footer>
+
+      {showSummary ? (
+        <SummaryBar
+          dealType={activeDeal.type}
+          results={results}
+          bottomInset={keyboardInset}
+          onShowResults={scrollToResults}
+        />
+      ) : null}
 
       <Toast toast={toast} onDismiss={dismissToast} />
     </div>
