@@ -15,7 +15,15 @@ import {
   downPayment,
   downPaymentPercent,
   estimatedClosingCostRange,
+  breakEvenRent,
   equityAtPurchase,
+  equityOverTime,
+  maxPriceForFrontRatio,
+  maxPriceToBreakEven,
+  maxRateForFrontRatio,
+  maxRateToBreakEven,
+  mortgageRecast,
+  rateForPayment,
   frontRatio,
   grossRentForMonths,
   incomeForFrontRatio,
@@ -803,5 +811,145 @@ describe('equity at purchase', () => {
     expect(equityAtPurchase(deal({ propertyValue: 300000, rehabCost: 20000, propertyArvValue: 310000 }))).toBe(-10000)
     expect(equityAtPurchase(deal({ propertyValue: 300000 }))).toBeNull()
     expect(equityAtPurchase(deal({ propertyArvValue: 300000 }))).toBeNull()
+  })
+})
+
+describe('targets', () => {
+  const rental = {
+    propertyValue: 300000,
+    loanValue: 240000,
+    loanRate: 7,
+    loanTerm: 30,
+    rentValue: 3000,
+    propertyTax: 1.2,
+    additionalMonthlyFees: 50,
+  }
+  const itemized = { ...rental, vacancyRate: 5, managementRate: 8, maintenanceRate: 10, insuranceAnnual: 1500 }
+
+  it('finds the rate for a payment, or says none fits', () => {
+    const payment = monthlyMortgagePayment(240000, 6.5, 30) as number
+    expect(rateForPayment(240000, 30, payment)).toBeCloseTo(6.5, 6)
+    expect(rateForPayment(240000, 30, 100)).toBeNull()
+    expect(rateForPayment(240000, 30, 1e6)).toBe(Infinity)
+  })
+
+  it('gives the rent at which cash flow is zero on the 50% rule and on itemized expenses', () => {
+    const rent50 = breakEvenRent(deal(rental)) as number
+    expect(monthlyCashFlow(deal({ ...rental, rentValue: rent50 }), 0.5)).toBeCloseTo(0, 6)
+    const rentItemized = breakEvenRent(deal(itemized)) as number
+    expect(monthlyCashFlowItemized(deal({ ...itemized, rentValue: rentItemized }))).toBeCloseTo(0, 6)
+  })
+
+  it('gives the highest price that still breaks even at the same down payment %', () => {
+    for (const inputs of [rental, itemized]) {
+      const price = maxPriceToBreakEven(deal(inputs)) as number
+      const atMax = deal({ ...inputs, propertyValue: price, loanValue: price * 0.8 })
+      const cashFlow =
+        inputs === rental ? monthlyCashFlow(atMax, 0.5) : monthlyCashFlowItemized(atMax)
+      expect(cashFlow).toBeCloseTo(0, 4)
+    }
+    expect(maxPriceToBreakEven(deal({ ...rental, rentValue: null }))).toBeNull()
+  })
+
+  it('gives the highest rate that still breaks even', () => {
+    const rate = maxRateToBreakEven(deal({ ...rental, rentValue: 4000 })) as number
+    expect(monthlyCashFlow(deal({ ...rental, rentValue: 4000, loanRate: rate }), 0.5)).toBeCloseTo(0, 4)
+    // Rent too low to break even even at 0%
+    expect(maxRateToBreakEven(deal({ ...rental, rentValue: 1000 }))).toBeNull()
+  })
+
+  const home = {
+    propertyValue: 500000,
+    loanValue: 450000,
+    loanRate: 6.5,
+    loanTerm: 30,
+    propertyTax: 1,
+    insuranceAnnual: 1800,
+    additionalMonthlyFees: 100,
+    householdIncome: 14000,
+  }
+
+  it('gives the highest price within the 28% rule, PMI included', () => {
+    const price = maxPriceForFrontRatio(deal(home)) as number
+    const atMax = deal({ ...home, propertyValue: price, loanValue: price * 0.9 })
+    expect(frontRatio(atMax)).toBeCloseTo(28, 6)
+    expect(maxPriceForFrontRatio(deal({ ...home, householdIncome: null }))).toBeNull()
+  })
+
+  it('gives the highest rate within the 28% rule', () => {
+    const rate = maxRateForFrontRatio(deal(home)) as number
+    expect(frontRatio(deal({ ...home, loanRate: rate }))).toBeCloseTo(28, 4)
+  })
+})
+
+describe('mortgage recast', () => {
+  const loan = { loanValue: 320000, loanRate: 6.5, loanTerm: 30, recastYears: 5, recastLumpSum: 50000, recastFee: 300 }
+
+  /** Month-by-month schedule with the lump sum after `monthsIn` payments, then either a recast or the same payment. */
+  function simulate(recastAfterLump: boolean) {
+    const c = 6.5 / 100 / 12
+    let balance = 320000
+    let payment = monthlyMortgagePayment(320000, 6.5, 30) as number
+    let interest = 0
+    let month = 0
+    while (balance > 0.005) {
+      if (month === 60) {
+        balance -= 50000
+        if (recastAfterLump) payment = monthlyMortgagePayment(balance, 6.5, 25) as number
+      }
+      const charge = balance * c
+      interest += charge
+      balance = balance + charge - Math.min(payment, balance + charge)
+      month++
+    }
+    return { interest, month, payment }
+  }
+
+  it('lowers the payment over the remaining term and matches a month-by-month schedule', () => {
+    const r = mortgageRecast(deal(loan)) as NonNullable<ReturnType<typeof mortgageRecast>>
+    const recast = simulate(true)
+    const keep = simulate(false)
+    expect(r.balanceAtRecast).toBeCloseTo(loanBalanceAfter(320000, 6.5, 30, 60) as number, 6)
+    expect(r.newPayment).toBeCloseTo(recast.payment, 6)
+    expect(r.newPayment).toBeLessThan(r.originalPayment)
+    expect(r.interestRecast).toBeCloseTo(recast.interest, 2)
+    expect(r.interestKeepPayment).toBeCloseTo(keep.interest, 2)
+    expect(r.payoffMonthKeepPayment).toBe(keep.month)
+    expect(r.interestNoExtra).toBeCloseTo(totalInterest(deal(loan)) as number, 2)
+    // Keeping the payment saves more interest; the recast lowers the bill instead
+    expect(r.interestSavedKeepPayment).toBeGreaterThan(r.interestSavedRecast)
+    expect(r.netSavingsRecast).toBeCloseTo(r.interestSavedRecast - 300, 6)
+  })
+
+  it('pays the loan off when the lump sum covers the balance', () => {
+    const r = mortgageRecast(deal({ ...loan, recastLumpSum: 1e6 })) as NonNullable<ReturnType<typeof mortgageRecast>>
+    expect(r.lumpSum).toBeCloseTo(r.balanceAtRecast, 6)
+    expect(r.newPayment).toBe(0)
+    expect(r.payoffMonthKeepPayment).toBe(60)
+  })
+
+  it('needs a lump sum and a time inside the term', () => {
+    expect(mortgageRecast(deal({ ...loan, recastLumpSum: null }))).toBeNull()
+    expect(mortgageRecast(deal({ ...loan, recastYears: 30 }))).toBeNull()
+    expect(mortgageRecast(deal({ ...loan, recastYears: 0 }))).toBeNull()
+    expect(mortgageRecast(deal({ ...loan, loanRate: null }))).toBeNull()
+  })
+})
+
+describe('equity over time', () => {
+  const inputs = { propertyValue: 300000, propertyArvValue: 360000, loanValue: 240000, loanRate: 6, loanTerm: 30, appreciationRate: 3 }
+
+  it('grows rentals from ARV and homes from the price, less the loan balance', () => {
+    const rental = equityOverTime(deal(inputs), 'investment', 10)
+    const home = equityOverTime(deal(inputs), 'owner', 10)
+    expect(rental).toHaveLength(11)
+    expect(rental[0]).toBeCloseTo(120000, 6)
+    expect(home[0]).toBeCloseTo(60000, 6)
+    const balance = loanBalanceAfter(240000, 6, 30, 120) as number
+    expect(home[10]).toBeCloseTo(300000 * 1.03 ** 10 - balance, 4)
+  })
+
+  it('needs an appreciation rate', () => {
+    expect(equityOverTime(deal({ ...inputs, appreciationRate: null }), 'owner', 5).every((v) => v == null)).toBe(true)
   })
 })

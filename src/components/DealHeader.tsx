@@ -11,6 +11,7 @@ interface DealHeaderProps {
   onTypeChange: (type: DealType) => void
   onDuplicate: () => void
   onShare: () => void
+  onPrint: () => void
   onDelete: () => void
 }
 
@@ -22,6 +23,7 @@ export function DealHeader({
   onTypeChange,
   onDuplicate,
   onShare,
+  onPrint,
   onDelete,
 }: DealHeaderProps) {
   const [draft, setDraft] = useState(deal.name)
@@ -84,6 +86,9 @@ export function DealHeader({
         </button>
         <button type="button" className="btn btn-small" onClick={onShare}>
           Copy link
+        </button>
+        <button type="button" className="btn btn-small" onClick={onPrint}>
+          Print
         </button>
         {canDelete ? (
           <button type="button" className="btn btn-small btn-danger" onClick={onDelete}>

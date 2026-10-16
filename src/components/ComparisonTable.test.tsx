@@ -77,7 +77,7 @@ describe('ComparisonTable', () => {
         onSelect={onSelect}
       />,
     )
-    within(screen.getByRole('table')).getByRole('button', { name: 'B' }).click()
+    within(screen.getByRole('table', { name: 'Deal comparison' })).getByRole('button', { name: 'B' }).click()
     expect(onSelect).toHaveBeenCalledWith('B')
   })
 

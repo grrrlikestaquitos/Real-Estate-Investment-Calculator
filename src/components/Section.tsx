@@ -8,9 +8,18 @@ interface SectionProps {
   plain?: boolean
   /** Span the full width of the results grid. */
   wide?: boolean
+  /** Keep on the one-page printout (other results sections are left off paper). */
+  printKeep?: boolean
 }
 
-export function Section({ title, subtitle, children, plain = false, wide = false }: SectionProps) {
+export function Section({
+  title,
+  subtitle,
+  children,
+  plain = false,
+  wide = false,
+  printKeep = false,
+}: SectionProps) {
   if (plain) {
     return (
       <section className={`section-plain ${wide ? 'span-2' : ''}`}>
@@ -22,7 +31,7 @@ export function Section({ title, subtitle, children, plain = false, wide = false
   }
 
   return (
-    <section className={`card ${wide ? 'span-2' : ''}`}>
+    <section className={`card ${wide ? 'span-2' : ''} ${printKeep ? 'print-keep' : ''}`}>
       <header className="card-header">
         <h2>{title}</h2>
         {subtitle ? <p className="card-subtitle">{subtitle}</p> : null}

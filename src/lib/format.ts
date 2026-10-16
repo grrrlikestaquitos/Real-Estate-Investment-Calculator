@@ -79,3 +79,13 @@ export function formatCurrencyRange(range: [number, number] | null): string {
   if (range == null) return UNAVAILABLE
   return `${formatCurrency(range[0])} – ${formatCurrency(range[1])}`
 }
+
+/** A span of months as years and months: "25 yrs 4 mo", "30 yrs", "8 mo". */
+export function formatDuration(months: number): string {
+  const whole = Math.max(0, Math.round(months))
+  const years = Math.floor(whole / 12)
+  const rest = whole % 12
+  const yearText = years === 0 ? '' : `${years} ${years === 1 ? 'yr' : 'yrs'}`
+  if (rest === 0) return yearText || '0 mo'
+  return yearText ? `${yearText} ${rest} mo` : `${rest} mo`
+}

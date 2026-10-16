@@ -1,4 +1,4 @@
-import type { DealInputs } from './types'
+import type { DealInputs, DealType } from './types'
 import { ANALYSIS_HORIZONS } from './types'
 
 function isNum(v: number | null | undefined): v is number {
@@ -641,6 +641,227 @@ export function yearlyProjection(inputs: DealInputs, years = ANALYSIS_HORIZONS[A
   })
 }
 
+/**
+ * Equity for each year from today through `years`: value at the appreciation
+ * rate minus the purchase loan's balance. Rentals grow from ARV (the value
+ * after rehab), homes from the price.
+ */
+export function equityOverTime(
+  inputs: DealInputs,
+  type: DealType,
+  years = ANALYSIS_HORIZONS[ANALYSIS_HORIZONS.length - 1],
+): (number | null)[] {
+  const start = type === 'investment' ? (inputs.propertyArvValue ?? inputs.propertyValue) : inputs.propertyValue
+  return Array.from({ length: years + 1 }, (_, year) => {
+    const value = homeValueAfterYears(start, inputs.appreciationRate, year)
+    const balance = loanBalanceAfter(inputs.loanValue, inputs.loanRate, inputs.loanTerm, year * 12)
+    return isNum(value) && isNum(balance) ? value - balance : null
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Targets: what the deal needs, holding everything else as entered
+// ---------------------------------------------------------------------------
+
+/** Highest annual rate (%) tried when solving for a rate. */
+const MAX_RATE_SEARCHED = 30
+
+/**
+ * The annual rate (%) at which a loan's monthly payment equals `payment`.
+ * Null when even 0% costs more; Infinity when any rate up to 30% fits.
+ */
+export function rateForPayment(
+  principal: number | null,
+  termYears: number | null,
+  payment: number,
+): number | null {
+  const at = (rate: number) => monthlyMortgagePayment(principal, rate, termYears)
+  const atZero = at(0)
+  if (!isNum(atZero) || atZero > payment) return null
+  if ((at(MAX_RATE_SEARCHED) as number) <= payment) return Infinity
+  let low = 0
+  let high = MAX_RATE_SEARCHED
+  for (let i = 0; i < 50; i++) {
+    const mid = (low + high) / 2
+    if ((at(mid) as number) > payment) high = mid
+    else low = mid
+  }
+  return low
+}
+
+/**
+ * Operating expenses on the deal's basis, split the way the targets need them:
+ * the share of rent kept, fixed monthly costs, and property tax per dollar of price.
+ */
+function expenseModel(inputs: DealInputs) {
+  const fees = orZero(inputs.additionalMonthlyFees)
+  if (expenseBasis(inputs) === 'itemized') {
+    const rentShare =
+      (orZero(inputs.vacancyRate) + orZero(inputs.managementRate) + orZero(inputs.maintenanceRate)) / 100
+    return {
+      rentKept: 1 - rentShare,
+      fixed: orZero(inputs.insuranceAnnual) / 12 + fees,
+      taxPerDollar: orZero(inputs.propertyTax) / 100 / 12,
+    }
+  }
+  return { rentKept: 0.5, fixed: fees, taxPerDollar: 0 }
+}
+
+/** Monthly rent at which cash flow is zero, on the deal's expense basis (itemized, else the 50% rule). */
+export function breakEvenRent(inputs: DealInputs): number | null {
+  const payment = monthlyMortgagePayment(inputs.loanValue, inputs.loanRate, inputs.loanTerm)
+  if (!isNum(payment)) return null
+  const { rentKept, fixed, taxPerDollar } = expenseModel(inputs)
+  if (rentKept <= 0) return null
+  return (payment + fixed + taxPerDollar * orZero(inputs.propertyValue)) / rentKept
+}
+
+/** Highest price that still breaks even at the entered rent, keeping the same down payment %, rate, and term. */
+export function maxPriceToBreakEven(inputs: DealInputs): number | null {
+  const { rentValue: rent } = inputs
+  const percentDown = downPaymentPercent(inputs)
+  const perDollarBorrowed = monthlyMortgagePayment(1, inputs.loanRate, inputs.loanTerm)
+  if (!isNum(rent) || !isNum(percentDown) || !isNum(perDollarBorrowed)) return null
+  const { rentKept, fixed, taxPerDollar } = expenseModel(inputs)
+  const costPerDollar = (1 - percentDown / 100) * perDollarBorrowed + taxPerDollar
+  if (costPerDollar <= 0) return null
+  return Math.max(0, (rent * rentKept - fixed) / costPerDollar)
+}
+
+/** Highest rate at which the entered rent still breaks even. */
+export function maxRateToBreakEven(inputs: DealInputs): number | null {
+  const { rentValue: rent } = inputs
+  if (!isNum(rent) || !isNum(inputs.loanValue)) return null
+  const { rentKept, fixed, taxPerDollar } = expenseModel(inputs)
+  const available = rent * rentKept - fixed - taxPerDollar * orZero(inputs.propertyValue)
+  return rateForPayment(inputs.loanValue, inputs.loanTerm, available)
+}
+
+/** Highest price whose housing payment stays within 28% of income, keeping the same down payment %, rate, and term. */
+export function maxPriceForFrontRatio(inputs: DealInputs): number | null {
+  const { householdIncome: income } = inputs
+  const percentDown = downPaymentPercent(inputs)
+  const perDollarBorrowed = monthlyMortgagePayment(1, inputs.loanRate, inputs.loanTerm)
+  if (!isNum(income) || income <= 0 || !isNum(percentDown) || !isNum(perDollarBorrowed)) return null
+  const loanShare = 1 - percentDown / 100
+  const pmiPerDollar =
+    loanShare * 100 > PMI_REQUIRED_ABOVE_LTV
+      ? (loanShare * (inputs.pmiRate ?? DEFAULT_PMI_RATE_PERCENT)) / 100 / 12
+      : 0
+  const costPerDollar = loanShare * perDollarBorrowed + orZero(inputs.propertyTax) / 100 / 12 + pmiPerDollar
+  if (costPerDollar <= 0) return null
+  const available =
+    (income * FRONT_RATIO_PASS_PERCENT) / 100 -
+    orZero(inputs.insuranceAnnual) / 12 -
+    orZero(inputs.additionalMonthlyFees)
+  return Math.max(0, available / costPerDollar)
+}
+
+/** Highest rate at which the housing payment stays within 28% of income. */
+export function maxRateForFrontRatio(inputs: DealInputs): number | null {
+  const { householdIncome: income } = inputs
+  if (!isNum(income) || income <= 0 || !isNum(inputs.loanValue)) return null
+  const available =
+    (income * FRONT_RATIO_PASS_PERCENT) / 100 -
+    orZero(monthlyPropertyTax(inputs)) -
+    orZero(monthlyInsurance(inputs)) -
+    orZero(monthlyPmi(inputs)) -
+    orZero(inputs.additionalMonthlyFees)
+  return rateForPayment(inputs.loanValue, inputs.loanTerm, available)
+}
+
+// ---------------------------------------------------------------------------
+// Mortgage recast
+// ---------------------------------------------------------------------------
+
+export interface RecastResult {
+  /** Payments made before the recast. */
+  monthsIn: number
+  balanceAtRecast: number
+  /** Lump sum applied (capped at the balance). */
+  lumpSum: number
+  fee: number
+  originalPayment: number
+  /** Re-amortized payment over the months left. */
+  newPayment: number
+  monthlySavings: number
+  /** Total interest over the life of the loan for each choice. */
+  interestNoExtra: number
+  interestRecast: number
+  interestKeepPayment: number
+  interestSavedRecast: number
+  /** Interest saved less the lender's recast fee. */
+  netSavingsRecast: number
+  interestSavedKeepPayment: number
+  /** Month the loan is paid off if you pay the lump sum but keep the original payment. */
+  payoffMonthKeepPayment: number
+  monthsSoonerKeepPayment: number
+  termMonths: number
+}
+
+/** Pay `balance` down at `payment` a month: months taken and interest paid. */
+function payOff(balance: number, monthlyRate: number, payment: number): { months: number; interest: number } {
+  let remaining = balance
+  let months = 0
+  let interest = 0
+  while (remaining > 0.005 && months < 1200) {
+    const charge = remaining * monthlyRate
+    interest += charge
+    remaining = remaining + charge - Math.min(payment, remaining + charge)
+    months++
+  }
+  return { months, interest }
+}
+
+/**
+ * A recast: pay a lump sum toward principal some years into the loan and have
+ * the lender re-amortize the rest over the remaining term at the same rate,
+ * lowering the payment. Compared with no extra payment, and with paying the
+ * same lump sum but keeping the original payment (paying off early instead).
+ */
+export function mortgageRecast(inputs: DealInputs): RecastResult | null {
+  const { loanValue: principal, loanRate: rate, loanTerm: term, recastYears, recastLumpSum } = inputs
+  const payment = monthlyMortgagePayment(principal, rate, term)
+  if (!isNum(payment) || !isNum(principal) || !isNum(rate) || !isNum(term)) return null
+  if (!isNum(recastYears) || !isNum(recastLumpSum) || recastLumpSum <= 0) return null
+  const termMonths = Math.round(term * 12)
+  const monthsIn = Math.round(recastYears * 12)
+  if (monthsIn < 1 || monthsIn >= termMonths) return null
+
+  const balanceAtRecast = loanBalanceAfter(principal, rate, term, monthsIn) as number
+  const lumpSum = Math.min(recastLumpSum, balanceAtRecast)
+  const balanceAfter = balanceAtRecast - lumpSum
+  const monthsLeft = termMonths - monthsIn
+  const newPayment = monthlyMortgagePayment(balanceAfter, rate, monthsLeft / 12) as number
+
+  // Interest already paid is the same in every scenario.
+  const interestSoFar = payment * monthsIn - (principal - balanceAtRecast)
+  const interestNoExtra = interestSoFar + payment * monthsLeft - balanceAtRecast
+  const interestRecast = interestSoFar + newPayment * monthsLeft - balanceAfter
+  const keep = payOff(balanceAfter, rate / 100 / 12, payment)
+  const interestKeepPayment = interestSoFar + keep.interest
+  const fee = orZero(inputs.recastFee)
+
+  return {
+    monthsIn,
+    balanceAtRecast,
+    lumpSum,
+    fee,
+    originalPayment: payment,
+    newPayment,
+    monthlySavings: payment - newPayment,
+    interestNoExtra,
+    interestRecast,
+    interestKeepPayment,
+    interestSavedRecast: interestNoExtra - interestRecast,
+    netSavingsRecast: interestNoExtra - interestRecast - fee,
+    interestSavedKeepPayment: interestNoExtra - interestKeepPayment,
+    payoffMonthKeepPayment: monthsIn + keep.months,
+    monthsSoonerKeepPayment: monthsLeft - keep.months,
+    termMonths,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Aggregated results
 // ---------------------------------------------------------------------------
@@ -716,6 +937,12 @@ export interface DealResults {
   cashFlowAfterRefinance: number | null
   cashFlowAfterRefinanceFiftyRule: number | null
   cashOnCashAfterRefinance: number | null
+  breakEvenRent: number | null
+  maxPriceToBreakEven: number | null
+  maxRateToBreakEven: number | null
+  maxPriceForFrontRatio: number | null
+  maxRateForFrontRatio: number | null
+  recast: RecastResult | null
 }
 
 export function computeResults(inputs: DealInputs): DealResults {
@@ -844,5 +1071,11 @@ export function computeResults(inputs: DealInputs): DealResults {
     cashFlowAfterRefinance: cashFlowAfterRefinance(inputs),
     cashFlowAfterRefinanceFiftyRule: cashFlowAfterRefinance(inputs, 'fiftyRule'),
     cashOnCashAfterRefinance: cashOnCashAfterRefinance(inputs),
+    breakEvenRent: breakEvenRent(inputs),
+    maxPriceToBreakEven: maxPriceToBreakEven(inputs),
+    maxRateToBreakEven: maxRateToBreakEven(inputs),
+    maxPriceForFrontRatio: maxPriceForFrontRatio(inputs),
+    maxRateForFrontRatio: maxRateForFrontRatio(inputs),
+    recast: mortgageRecast(inputs),
   }
 }

@@ -185,6 +185,41 @@ describe('App', () => {
     expect(stored[0].inputs.loanRate).toBe(14)
   })
 
+  it('shows what a recast saves next to keeping the payment', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    expect(screen.getByText(/Enter the loan amount, rate, and term first/)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Sale Price'), '400000')
+    await user.click(screen.getByRole('button', { name: '20%' }))
+    await user.type(screen.getByLabelText('Fixed Rate'), '6.5')
+
+    await user.click(screen.getByText('Recast later (optional)'))
+    await user.type(screen.getByLabelText('Lump Sum'), '50000')
+    await user.type(screen.getByLabelText('Years Into the Loan'), '5')
+    expect(screen.getByText('$299,555 still owed then')).toBeInTheDocument()
+
+    const recast = screen.getByRole('heading', { name: 'Mortgage Recast' }).closest('section') as HTMLElement
+    expect(within(recast).getByText('$1,685.01/mo')).toBeInTheDocument()
+    const saved = within(recast).getByRole('row', { name: /^Interest saved/ })
+    expect(within(saved).getAllByRole('cell').map((c) => c.textContent)).toEqual(['—', '$51,281', '$143,583'])
+  })
+
+  it('solves for the rent, price, and rate that break even', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.type(screen.getByLabelText('Sale Price'), '400000')
+    await user.type(screen.getByLabelText('Monthly Rent'), '3200')
+    await user.click(screen.getByRole('button', { name: '20%' }))
+    await user.type(screen.getByLabelText('Fixed Rate'), '6.5')
+
+    const targets = screen.getByRole('heading', { name: 'What It Takes' }).closest('section') as HTMLElement
+    // 50% rule: payment / 0.5
+    expect(within(targets).getByText('$4,045/mo')).toBeInTheDocument()
+    expect(within(targets).getByText('now $3,200/mo')).toBeInTheDocument()
+    expect(within(targets).getByText('$316,422')).toBeInTheDocument()
+    expect(within(targets).getByText('4.39%')).toBeInTheDocument()
+  })
+
   it('picks a common loan term in one tap, or types another', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -261,7 +296,7 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: /^compare/i }))
     expect(screen.getByRole('heading', { name: 'Deal Comparison' })).toBeInTheDocument()
-    const table = screen.getByRole('table')
+    const table = screen.getByRole('table', { name: 'Deal comparison' })
 
     const priceRow = within(table).getByRole('row', { name: /^Sale Price/ })
     expect(within(priceRow).getByText('$300,000')).toBeInTheDocument()

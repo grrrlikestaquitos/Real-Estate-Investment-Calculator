@@ -80,6 +80,18 @@ const GROUPS: Group[] = [
       { label: 'Fixed Rate', get: (_r, d) => d.inputs.loanRate, format: formatPercent, better: 'lower' },
       { label: 'Mortgage / mo', get: (r) => r.monthlyMortgage, format: formatCurrency, better: 'lower' },
       { label: 'Total Interest', get: (r) => r.totalInterest, format: formatCurrency, better: 'lower' },
+      {
+        label: 'Recast: Interest Saved',
+        get: (r) => r.recast?.interestSavedRecast ?? null,
+        format: formatCurrency,
+        better: 'higher',
+      },
+      {
+        label: 'Recast: New Payment',
+        get: (r) => r.recast?.newPayment ?? null,
+        format: formatCurrency,
+        better: 'lower',
+      },
     ],
   },
   {
@@ -123,6 +135,14 @@ const GROUPS: Group[] = [
         format: formatCurrency,
         better: 'higher',
         signed: true,
+      },
+      {
+        label: 'Rent to Break Even',
+        mode: 'investment',
+        get: (r) => r.breakEvenRent,
+        format: formatCurrency,
+        better: 'lower',
+        passes: (needed, d) => (d.inputs.rentValue == null ? null : d.inputs.rentValue >= needed),
       },
       {
         label: 'Yearly ROI (50% Rule)',
@@ -174,6 +194,13 @@ const GROUPS: Group[] = [
         format: formatPercent,
         better: 'lower',
         passes: (v) => v <= FRONT_RATIO_PASS_PERCENT,
+      },
+      {
+        label: `Max Price (${FRONT_RATIO_PASS_PERCENT}% Rule)`,
+        mode: 'owner',
+        get: (r) => r.maxPriceForFrontRatio,
+        format: formatCurrency,
+        passes: (max, d) => (d.inputs.propertyValue == null ? null : d.inputs.propertyValue <= max),
       },
       {
         label: 'Equity @ 10 yr',
@@ -250,7 +277,7 @@ export function ComparisonTable({
         <p className="empty-state">Enter a sale price or loan on your deals to compare them here.</p>
       ) : (
         <div className="table-scroll">
-          <table className="comparison-table">
+          <table className="comparison-table" aria-label="Deal comparison">
             <thead>
               <tr>
                 <th scope="col" className="sticky-col">

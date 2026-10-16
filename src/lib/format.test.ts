@@ -4,6 +4,7 @@ import {
   formatCurrencyCompact,
   formatCurrencyExact,
   formatCurrencyRange,
+  formatDuration,
   formatNumber,
   formatPercent,
   groupDigits,
@@ -82,5 +83,15 @@ describe('groupDigits', () => {
 
   it('returns an empty string for empty input', () => {
     expect(groupDigits('')).toBe('')
+  })
+})
+
+describe('formatDuration', () => {
+  it('shows years and leftover months', () => {
+    expect(formatDuration(360)).toBe('30 yrs')
+    expect(formatDuration(304)).toBe('25 yrs 4 mo')
+    expect(formatDuration(13)).toBe('1 yr 1 mo')
+    expect(formatDuration(8)).toBe('8 mo')
+    expect(formatDuration(0)).toBe('0 mo')
   })
 })

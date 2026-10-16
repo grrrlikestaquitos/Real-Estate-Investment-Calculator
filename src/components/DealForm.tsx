@@ -7,6 +7,7 @@ import {
   downPayment,
   downPaymentPercent,
   homeValueAfterYears,
+  loanBalanceAfter,
   loanForDownPayment,
   monthlyMortgagePayment,
   monthlyPmi,
@@ -42,6 +43,7 @@ const RATE_RANGE = { min: 2, max: 12, step: 0.125 } as const
 const EXPENSE_KEYS: DealInputKey[] = ['vacancyRate', 'managementRate', 'maintenanceRate', 'insuranceAnnual']
 const REFINANCE_KEYS: DealInputKey[] = ['refiLtv', 'refiRate', 'refiTerm', 'refiClosingCost']
 const POINTS_KEYS: DealInputKey[] = ['loanPointRate', 'pointsOffered']
+const RECAST_KEYS: DealInputKey[] = ['recastYears', 'recastLumpSum', 'recastFee']
 
 function toFieldStrings(inputs: DealInputs): FieldStrings {
   const out = {} as FieldStrings
@@ -196,6 +198,10 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
   const refiLoan = refinanceLoan(inputs)
   const refiPayment = refinancePayment(inputs)
   const pointValue = mortgagePointValue(inputs.loanValue)
+  const balanceAtRecast =
+    inputs.recastYears == null
+      ? null
+      : loanBalanceAfter(inputs.loanValue, inputs.loanRate, inputs.loanTerm, Math.round(inputs.recastYears * 12))
 
   return (
     <section className="card form-card">
@@ -423,6 +429,36 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
             </OptionalGroup>
           </>
         ) : null}
+
+        <OptionalGroup
+          title="Recast later (optional)"
+          hint="A lump sum toward principal some years in, after which the lender lowers your payment."
+          defaultOpen={anySet(RECAST_KEYS)}
+        >
+          <Field
+            label="Lump Sum"
+            prefix="$"
+            placeholder="e.g. 50,000"
+            grouped
+            info={<InfoTip {...GLOSSARY.recast} />}
+            {...bind('recastLumpSum')}
+          />
+          <Field label="Recast Fee" prefix="$" placeholder="e.g. 250" grouped {...bind('recastFee')} />
+          <SliderField
+            label="Years Into the Loan"
+            suffix="yrs"
+            min={0.5}
+            max={Math.max(1, (inputs.loanTerm ?? 30) - 0.5)}
+            step={0.5}
+            placeholder="e.g. 5"
+            hint={
+              balanceAtRecast != null
+                ? `${formatCurrency(balanceAtRecast)} still owed then`
+                : 'When you pay the lump sum'
+            }
+            {...bind('recastYears')}
+          />
+        </OptionalGroup>
 
         <OptionalGroup title="Mortgage points (optional)" defaultOpen={anySet(POINTS_KEYS)}>
           <SliderField

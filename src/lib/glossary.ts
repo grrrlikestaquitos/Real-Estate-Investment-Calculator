@@ -88,6 +88,14 @@ export const GLOSSARY = {
     term: 'monthly ownership cost',
     text: 'Mortgage, property tax, insurance, PMI, fees, and about 1% of the price a year set aside for maintenance.',
   },
+  recast: {
+    term: 'a recast',
+    text: "Pay a lump sum toward principal and the lender re-spreads what's left over the remaining term at the same rate, so the payment drops. It's usually a $150–$500 fee, with no new loan or credit check.",
+  },
+  breakEven: {
+    term: 'break-even',
+    text: 'The point where rent just covers the mortgage, fees, and operating expenses, so monthly cash flow is $0. Each figure changes one input and holds the rest as entered.',
+  },
   equity: {
     term: 'equity',
     text: 'Home value minus what you still owe. It grows as you pay down the loan and as the home appreciates (enter an appreciation rate to project it).',

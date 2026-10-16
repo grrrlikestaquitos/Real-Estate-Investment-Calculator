@@ -34,6 +34,10 @@ export interface DealInputs {
   refiRate: number | null
   refiTerm: number | null
   refiClosingCost: number | null
+  /** Mortgage recast: when (years into the loan), the lump sum toward principal, and the lender's fee (both modes). */
+  recastYears: number | null
+  recastLumpSum: number | null
+  recastFee: number | null
 }
 
 export type DealInputKey = keyof DealInputs
@@ -74,6 +78,9 @@ export const DEFAULT_INPUTS: DealInputs = {
   refiRate: null,
   refiTerm: null,
   refiClosingCost: null,
+  recastYears: null,
+  recastLumpSum: null,
+  recastFee: null,
 }
 
 export const DEFAULT_DEAL_TYPE: DealType = 'investment'

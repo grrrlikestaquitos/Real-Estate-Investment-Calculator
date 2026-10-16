@@ -43,6 +43,27 @@ export function useTheme() {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[theme])
   }, [theme])
 
+  // Paper is white: print in the light theme, then put the viewer's theme back.
+  useEffect(() => {
+    const root = document.documentElement
+    const toLight = () => {
+      root.dataset.theme = 'light'
+    }
+    const restore = () => {
+      root.dataset.theme = theme
+    }
+    const print = window.matchMedia?.('print')
+    const onPrintChange = (e: MediaQueryListEvent) => (e.matches ? toLight() : restore())
+    window.addEventListener('beforeprint', toLight)
+    window.addEventListener('afterprint', restore)
+    print?.addEventListener('change', onPrintChange)
+    return () => {
+      window.removeEventListener('beforeprint', toLight)
+      window.removeEventListener('afterprint', restore)
+      print?.removeEventListener('change', onPrintChange)
+    }
+  }, [theme])
+
   function toggleTheme() {
     const next: Theme = theme === 'dark' ? 'light' : 'dark'
     setStored(next)

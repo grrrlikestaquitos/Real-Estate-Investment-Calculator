@@ -21,6 +21,7 @@ import { copyText } from './lib/clipboard'
 import { exportDealsJson, parseImportedDeals } from './lib/storage'
 import { GLOSSARY } from './lib/glossary'
 import { ANALYSIS_HORIZONS } from './lib/types'
+import { CompareChart } from './components/CompareChart'
 import { ComparisonTable } from './components/ComparisonTable'
 import { DealForm } from './components/DealForm'
 import { DealHeader } from './components/DealHeader'
@@ -31,7 +32,10 @@ import { KeyMetrics } from './components/KeyMetrics'
 import { LineChart } from './components/LineChart'
 import { Section } from './components/Section'
 import { StatRow } from './components/StatRow'
+import { PrintSummary } from './components/PrintSummary'
+import { RecastSection } from './components/RecastSection'
 import { SummaryBar } from './components/SummaryBar'
+import { TargetsSection } from './components/TargetsSection'
 import { Toast } from './components/Toast'
 import { YearGrid } from './components/YearGrid'
 
@@ -295,12 +299,15 @@ export default function App() {
 
       <main className="app-main">
         {comparing ? (
-          <ComparisonTable
-            deals={deals.deals}
-            isIncluded={compareSelection.isIncluded}
-            onToggle={compareSelection.toggle}
-            onSelect={openDeal}
-          />
+          <>
+            <ComparisonTable
+              deals={deals.deals}
+              isIncluded={compareSelection.isIncluded}
+              onToggle={compareSelection.toggle}
+              onSelect={openDeal}
+            />
+            <CompareChart deals={deals.deals} isIncluded={compareSelection.isIncluded} />
+          </>
         ) : (
           <>
             <DealHeader
@@ -312,8 +319,10 @@ export default function App() {
               onTypeChange={(type) => deals.setDealType(activeDeal.id, type)}
               onDuplicate={handleDuplicate}
               onShare={() => void handleShare()}
+              onPrint={() => window.print()}
               onDelete={handleDelete}
             />
+            <PrintSummary deal={activeDeal} />
 
             <div className="layout">
               <div className="layout-side" ref={formRef}>
@@ -328,6 +337,7 @@ export default function App() {
               <div className="layout-results" ref={resultsRef}>
                 <DealIndicators dealType={activeDeal.type} results={results} />
                 <KeyMetrics dealType={activeDeal.type} results={results} />
+                <TargetsSection dealType={activeDeal.type} inputs={activeDeal.inputs} results={results} />
 
                 <div className="results-grid">
                   {isInvestor ? (
@@ -602,6 +612,7 @@ export default function App() {
 
                       <Section
                         title="Cash Flow Over Time"
+                        printKeep
                         subtitle="Cumulative cash flow after mortgage and fees, before operating expenses"
                         wide
                       >
@@ -639,6 +650,7 @@ export default function App() {
                   ) : (
                     <Section
                       title="Home Value & Equity Over Time"
+                      printKeep
                       subtitle="Projected from your purchase price at your annual appreciation rate; equity is value minus the remaining loan"
                       wide
                     >
@@ -665,6 +677,12 @@ export default function App() {
                       </details>
                     </Section>
                   )}
+
+                  <RecastSection
+                    dealType={activeDeal.type}
+                    inputs={activeDeal.inputs}
+                    recast={results.recast}
+                  />
                 </div>
 
                 <details className="card advanced-details">

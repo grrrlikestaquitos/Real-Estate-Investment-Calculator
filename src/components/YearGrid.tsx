@@ -17,8 +17,8 @@ export function YearGrid({ years, columns, format }: YearGridProps) {
         <thead>
           <tr>
             <th scope="col">Horizon</th>
-            {columns.map((column) => (
-              <th key={column.label} scope="col" className="numeric">
+            {columns.map((column, c) => (
+              <th key={c} scope="col" className="numeric">
                 {column.label}
               </th>
             ))}
@@ -28,11 +28,11 @@ export function YearGrid({ years, columns, format }: YearGridProps) {
           {years.map((y, i) => (
             <tr key={y}>
               <th scope="row">{`${y} Year${y === 1 ? '' : 's'}`}</th>
-              {columns.map((column) => {
+              {columns.map((column, c) => {
                 const value = column.values[i]
                 return (
                   <td
-                    key={column.label}
+                    key={c}
                     className={`numeric ${value != null && value < 0 ? 'negative' : ''}`}
                   >
                     {format(value)}

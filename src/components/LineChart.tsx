@@ -5,6 +5,8 @@ import { formatCurrency, formatCurrencyCompact } from '../lib/format'
 export interface ChartSeries {
   label: string
   values: readonly (number | null)[]
+  /** Categorical color slot (1–8). Defaults to the series' position, so give it when series can be filtered out and survivors must keep their colors. */
+  slot?: number
 }
 
 interface LineChartProps {
@@ -12,7 +14,7 @@ interface LineChartProps {
   title: string
   /** X positions in years, one per value in each series. */
   years: readonly number[]
-  /** Up to three series; colors follow their order (series slots 1–3). */
+  /** Up to eight series; colors follow their order, or each series' `slot`. */
   series: readonly ChartSeries[]
   /** Shown instead of the chart while no series has data. */
   emptyMessage: string
@@ -70,7 +72,7 @@ export function LineChart({ title, years, series, emptyMessage }: LineChartProps
   const [fromKeyboard, setFromKeyboard] = useState(false)
 
   const visible = series
-    .map((s, i) => ({ ...s, slot: i + 1 }))
+    .map((s, i) => ({ ...s, slot: s.slot ?? i + 1 }))
     .filter((s) => s.values.some((v) => v != null))
 
   // The wrapper stays mounted while empty so its width is already measured when data arrives.
@@ -162,6 +164,7 @@ export function LineChart({ title, years, series, emptyMessage }: LineChartProps
           className="chart-svg"
           width={width}
           height={HEIGHT}
+          viewBox={`0 0 ${width} ${HEIGHT}`}
           role="img"
           aria-label={`${title}. Focus and use the arrow keys to read values by year.`}
           tabIndex={0}
