@@ -16,7 +16,9 @@ import {
   refinancePayment,
 } from '../lib/calculations'
 import { formatCurrency, formatCurrencyCompact } from '../lib/format'
+import { GLOSSARY } from '../lib/glossary'
 import { Field } from './Field'
+import { InfoTip } from './InfoTip'
 import { SliderField } from './SliderField'
 import { TaxRateReference } from './TaxRateReference'
 import { TermField } from './TermField'
@@ -211,7 +213,13 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
             <Field label="Sale Price" prefix="$" grouped {...bind('propertyValue')} />
             {!isOwner ? (
               <>
-                <Field label="ARV / Market Value" prefix="$" grouped {...bind('propertyArvValue')} />
+                <Field
+                  label="ARV / Market Value"
+                  prefix="$"
+                  grouped
+                  info={<InfoTip {...GLOSSARY.arv} />}
+                  {...bind('propertyArvValue')}
+                />
                 <Field label="Rehab Budget" prefix="$" grouped {...bind('rehabCost')} />
                 <Field label="Monthly Rent" prefix="$" suffix="/mo" grouped {...bind('rentValue')} />
               </>
@@ -269,7 +277,13 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
               onLoanChange={(loan) => update('loanValue', loan)}
             />
             <Field label="Loan Amount" prefix="$" grouped {...bind('loanValue')} />
-            <Field label="Closing Costs" prefix="$" grouped {...bind('closingCost')} />
+            <Field
+              label="Closing Costs"
+              prefix="$"
+              grouped
+              info={<InfoTip {...GLOSSARY.closingCosts} />}
+              {...bind('closingCost')}
+            />
             <SliderField
               label="Fixed Rate"
               suffix="%"
@@ -278,7 +292,14 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
               {...bind('loanRate')}
             />
             <TermField label="Loan Term" presets={LOAN_TERM_PRESETS} {...bind('loanTerm')} />
-            <Field label="Other Monthly Fees" prefix="$" suffix="/mo" grouped {...bind('additionalMonthlyFees')} />
+            <Field
+              label="Other Monthly Fees"
+              prefix="$"
+              suffix="/mo"
+              grouped
+              info={<InfoTip {...GLOSSARY.otherFees} />}
+              {...bind('additionalMonthlyFees')}
+            />
             {isOwner ? (
               <>
                 <Field
@@ -291,6 +312,7 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
                 />
                 <SliderField
                   label="PMI Rate"
+                  info={<InfoTip {...GLOSSARY.pmi} />}
                   suffix="%"
                   min={0}
                   max={1.5}
@@ -326,6 +348,7 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
             >
               <SliderField
                 label="Vacancy"
+                info={<InfoTip {...GLOSSARY.vacancy} />}
                 suffix="%"
                 min={0}
                 max={15}
@@ -336,6 +359,7 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
               />
               <SliderField
                 label="Management"
+                info={<InfoTip {...GLOSSARY.management} />}
                 suffix="%"
                 min={0}
                 max={15}
@@ -346,6 +370,7 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
               />
               <SliderField
                 label="Repairs & CapEx"
+                info={<InfoTip {...GLOSSARY.capex} />}
                 suffix="%"
                 min={0}
                 max={20}
@@ -371,6 +396,7 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
             >
               <SliderField
                 label="Loan-to-Value"
+                info={<InfoTip {...GLOSSARY.ltv} />}
                 suffix="%"
                 min={50}
                 max={85}
@@ -409,6 +435,7 @@ export function DealForm({ deal, onCommit, onReset }: DealFormProps) {
           />
           <SliderField
             label="Points Offered"
+            info={<InfoTip {...GLOSSARY.points} />}
             suffix="pts"
             min={0}
             max={4}

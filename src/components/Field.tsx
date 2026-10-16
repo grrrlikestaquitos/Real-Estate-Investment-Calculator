@@ -17,6 +17,8 @@ interface FieldProps {
   hint?: ReactNode
   /** Extra controls under the input (e.g. quick-pick buttons). */
   children?: ReactNode
+  /** A "?" tip explaining the label. */
+  info?: ReactNode
 }
 
 const SIGNIFICANT = /[\d.-]/
@@ -43,6 +45,7 @@ export function Field({
   wide = false,
   hint,
   children,
+  info,
 }: FieldProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const pendingCaret = useRef<number | null>(null)
@@ -76,7 +79,10 @@ export function Field({
 
   return (
     <div className={`field ${wide ? 'field-wide' : ''}`}>
-      <label htmlFor={id}>{label}</label>
+      <div className="field-label-row">
+        <label htmlFor={id}>{label}</label>
+        {info}
+      </div>
       <div className="field-input">
         {prefix ? <span className="field-affix">{prefix}</span> : null}
         <input

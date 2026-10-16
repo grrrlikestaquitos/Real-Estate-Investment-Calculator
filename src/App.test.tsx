@@ -37,7 +37,7 @@ describe('App', () => {
     // Rent below 2% of ARV
     expect(screen.getByText('Rent is below 2% of ARV')).toBeInTheDocument()
     // 220000 - 180000 = $40,000 below-ARV difference
-    expect(screen.getByText('$40,000')).toBeInTheDocument()
+    expect(screen.getByText('$40,000', { selector: '.stat-value' })).toBeInTheDocument()
   })
 
   it('switches a deal to homeowner mode', async () => {
@@ -91,7 +91,7 @@ describe('App', () => {
     render(<App />)
 
     // Key metrics tiles show placeholders until inputs are provided
-    expect(screen.getByText('Sale Price', { selector: '.key-metric-label' })).toBeInTheDocument()
+    expect(screen.getByText('Cash Needed', { selector: '.key-metric-label' })).toBeInTheDocument()
 
     // Advanced analysis is collapsed by default
     const advanced = screen.getByText('Advanced Analysis').closest('details')
@@ -102,10 +102,11 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Home Value Over Time' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Rent & Tenant Screening' })).toBeInTheDocument()
 
-    // The key price tile picks up the value as you type
+    // The cash tile picks up the down payment as you go
     await user.type(screen.getByLabelText('Sale Price'), '180000')
-    const tile = screen.getByText('Sale Price', { selector: '.key-metric-label' }).closest('.key-metric')
-    expect(within(tile as HTMLElement).getByText('$180,000')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '20%' }))
+    const tile = screen.getByText('Cash Needed', { selector: '.key-metric-label' }).closest('.key-metric')
+    expect(within(tile as HTMLElement).getByText('$36,000')).toBeInTheDocument()
   })
 
   it('shows mode-specific advanced sections', async () => {

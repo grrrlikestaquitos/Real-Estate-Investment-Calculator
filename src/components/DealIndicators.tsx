@@ -1,7 +1,9 @@
 import type { DealResults } from '../lib/calculations'
 import { FRONT_RATIO_PASS_PERCENT, SEVENTY_RULE_PERCENT } from '../lib/calculations'
 import { formatCurrency, formatPercent } from '../lib/format'
+import { GLOSSARY, type GlossaryEntry } from '../lib/glossary'
 import type { DealType } from '../lib/types'
+import { InfoTip } from './InfoTip'
 
 interface DealIndicatorsProps {
   dealType: DealType
@@ -15,12 +17,15 @@ function Indicator({
   ok,
   value,
   detail,
+  info,
 }: {
   label: string
   ok: boolean | null
   /** The headline number behind the verdict (omitted until computable). */
   value?: string
   detail: string
+  /** Explains the rule behind the verdict. */
+  info?: GlossaryEntry
 }) {
   const state = ok == null ? 'unknown' : ok ? 'ok' : 'bad'
   return (
@@ -34,6 +39,7 @@ function Indicator({
           {state !== 'unknown' ? (
             <span className="sr-only">{ok ? ': passes' : ': fails'}</span>
           ) : null}
+          {info ? <InfoTip {...info} /> : null}
         </span>
         {value != null && ok != null ? <span className="indicator-value">{value}</span> : null}
         <span className="indicator-detail">{detail}</span>
@@ -53,6 +59,7 @@ export function DealIndicators({ dealType, results }: DealIndicatorsProps) {
       <div className="indicators">
         <Indicator
           label={`Affordability (${FRONT_RATIO_PASS_PERCENT}% Rule)`}
+          info={GLOSSARY.frontRatio}
           ok={frontRatio}
           value={`${formatPercent(results.frontRatioPct)} of income`}
           detail={
@@ -88,6 +95,7 @@ export function DealIndicators({ dealType, results }: DealIndicatorsProps) {
     <div className="indicators">
       <Indicator
         label="2% Rule"
+        info={GLOSSARY.twoPercentRule}
         ok={twoPercent}
         value={`${formatPercent(results.rentToArvRatioPct)} of ARV`}
         detail={
@@ -100,6 +108,7 @@ export function DealIndicators({ dealType, results }: DealIndicatorsProps) {
       />
       <Indicator
         label={`${SEVENTY_RULE_PERCENT}% Rule`}
+        info={GLOSSARY.seventyRule}
         ok={seventy}
         value={`Max offer ${formatCurrency(results.maxOfferSeventyRule)}`}
         detail={
@@ -118,6 +127,7 @@ export function DealIndicators({ dealType, results }: DealIndicatorsProps) {
       />
       <Indicator
         label="50% Rule Cash Flow"
+        info={GLOSSARY.fiftyRule}
         ok={cashFlowFifty != null ? cashFlowFifty >= 0 : null}
         value={cashFlowFifty != null ? perMonth(cashFlowFifty) : undefined}
         detail={cashFlowFifty == null ? 'Enter rent and loan' : 'After 50% of rent for expenses'}

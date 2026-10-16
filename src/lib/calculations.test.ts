@@ -15,8 +15,11 @@ import {
   downPayment,
   downPaymentPercent,
   estimatedClosingCostRange,
+  equityAtPurchase,
   frontRatio,
   grossRentForMonths,
+  incomeForFrontRatio,
+  monthlyHousingCost,
   homeValueAfterYears,
   loanBalanceAfter,
   loanForDownPayment,
@@ -487,6 +490,14 @@ describe('front ratio', () => {
     expect(frontRatio(deal({ ...base, householdIncome: 0 }))).toBeNull()
     expect(frontRatio(deal({ ...base, householdIncome: -100 }))).toBeNull()
   })
+
+  it('gives the income at which housing is exactly 28%', () => {
+    const housing = monthlyHousingCost(deal({ ...base })) as number
+    expect(incomeForFrontRatio(deal({ ...base }))).toBeCloseTo(housing / 0.28, 6)
+    // At that income the ratio sits right on the line
+    expect(frontRatio(deal({ ...base, householdIncome: housing / 0.28 }))).toBeCloseTo(28, 6)
+    expect(incomeForFrontRatio(deal({ ...base, loanRate: null }))).toBeNull()
+  })
 })
 
 describe('computeResults', () => {
@@ -781,3 +792,16 @@ describe('BRRR: rehab and refinance', () => {
   })
 })
 
+describe('equity at purchase', () => {
+  it('is ARV less price, rehab, and closing', () => {
+    const inputs = deal({ propertyValue: 200000, rehabCost: 30000, closingCost: 5000, propertyArvValue: 280000 })
+    expect(equityAtPurchase(inputs)).toBe(45000)
+    expect(computeResults(inputs).equityAtPurchase).toBe(45000)
+  })
+
+  it('can be negative and needs both price and ARV', () => {
+    expect(equityAtPurchase(deal({ propertyValue: 300000, rehabCost: 20000, propertyArvValue: 310000 }))).toBe(-10000)
+    expect(equityAtPurchase(deal({ propertyValue: 300000 }))).toBeNull()
+    expect(equityAtPurchase(deal({ propertyArvValue: 300000 }))).toBeNull()
+  })
+})

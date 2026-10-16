@@ -43,6 +43,7 @@
   --chart-axis: #5a6274;
   --range-track: #4b5263;
   --range-thumb: #ffffff;
+  --pop-bg: #3d4354;
   --radius: 12px;
   --radius-sm: 8px;
   /* Side padding that also centers content on very wide screens. */
@@ -97,6 +98,7 @@
   --chart-axis: #c2c8d2;
   --range-track: #d3d8e0;
   --range-thumb: #ffffff;
+  --pop-bg: #ffffff;
 }
 
 * {
@@ -683,6 +685,8 @@ body {
 }
 
 .indicator-label {
+  display: flex;
+  align-items: center;
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-dim);
@@ -746,7 +750,8 @@ body {
 }
 
 .key-metric-label {
-  display: block;
+  display: flex;
+  align-items: center;
   margin-bottom: 2px;
   font-size: 0.78rem;
   font-weight: 600;
@@ -957,6 +962,79 @@ details > summary::-webkit-details-marker {
 
 .field-input:has(input:disabled) {
   opacity: 0.55;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* "?" tips: a small button after a label that explains the term */
+
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  vertical-align: 1px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+
+/* A finger-sized hit area around the small circle */
+.info-tip::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+.info-tip:hover,
+.info-tip[aria-expanded='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.info-pop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 45;
+  display: block;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--pop-bg);
+  box-shadow: var(--pop-shadow);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
 }
 
 /* Slider fields: label and live readout on the left, number box on the right, slider below */
@@ -1289,6 +1367,8 @@ details > summary::-webkit-details-marker {
 }
 
 .stat-label {
+  display: flex;
+  align-items: center;
   font-size: 0.9rem;
   color: var(--text-dim);
 }

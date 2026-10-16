@@ -294,6 +294,14 @@ export function allInCost(inputs: DealInputs): number | null {
   return price + orZero(inputs.rehabCost) + orZero(inputs.closingCost)
 }
 
+/** Equity on day one: ARV less everything paid to get there (price, rehab, closing). */
+export function equityAtPurchase(inputs: DealInputs): number | null {
+  const allIn = allInCost(inputs)
+  const { propertyArvValue: arv } = inputs
+  if (!isNum(allIn) || !isNum(arv)) return null
+  return arv - allIn
+}
+
 /** Highest purchase price under the 70% rule: ARV × 70% − rehab. */
 export function maxOfferSeventyRule(inputs: DealInputs): number | null {
   const { propertyArvValue: arv } = inputs
@@ -562,17 +570,30 @@ export function rentVsBuyCumulative(inputs: DealInputs, years: number): number |
  * Front ratio: housing payment (principal & interest, property tax, insurance,
  * PMI, and other monthly fees such as HOA) as a percentage of monthly income.
  */
-export function frontRatio(inputs: DealInputs): number | null {
-  const { householdIncome: income } = inputs
+/** What lenders count as the housing payment: mortgage, property tax, insurance, PMI, and fees. */
+export function monthlyHousingCost(inputs: DealInputs): number | null {
   const payment = monthlyMortgagePayment(inputs.loanValue, inputs.loanRate, inputs.loanTerm)
-  if (!isNum(income) || income <= 0 || !isNum(payment)) return null
-  const housing =
+  if (!isNum(payment)) return null
+  return (
     payment +
     orZero(monthlyPropertyTax(inputs)) +
     orZero(monthlyInsurance(inputs)) +
     orZero(monthlyPmi(inputs)) +
     orZero(inputs.additionalMonthlyFees)
+  )
+}
+
+export function frontRatio(inputs: DealInputs): number | null {
+  const { householdIncome: income } = inputs
+  const housing = monthlyHousingCost(inputs)
+  if (!isNum(income) || income <= 0 || !isNum(housing)) return null
   return (housing / income) * 100
+}
+
+/** Gross monthly income at which the housing payment is exactly the 28% ceiling. */
+export function incomeForFrontRatio(inputs: DealInputs): number | null {
+  const housing = monthlyHousingCost(inputs)
+  return isNum(housing) ? housing / (FRONT_RATIO_PASS_PERCENT / 100) : null
 }
 
 // ---------------------------------------------------------------------------
@@ -671,6 +692,7 @@ export interface DealResults {
   rentVsBuyByHorizon: (number | null)[]
   frontRatioPct: number | null
   passesFrontRatio: boolean | null
+  incomeForFrontRatio: number | null
   monthlyInsurance: number | null
   monthlyPmi: number | null
   pmiMonths: number | null
@@ -682,6 +704,7 @@ export interface DealResults {
   monthlyCashFlowItemized: number | null
   roiItemized: number | null
   allInCost: number | null
+  equityAtPurchase: number | null
   maxOfferSeventyRule: number | null
   passesSeventyRule: boolean | null
   cashInvested: number | null
@@ -798,6 +821,7 @@ export function computeResults(inputs: DealInputs): DealResults {
     frontRatioPct,
     passesFrontRatio:
       frontRatioPct == null ? null : frontRatioPct <= FRONT_RATIO_PASS_PERCENT,
+    incomeForFrontRatio: incomeForFrontRatio(inputs),
     monthlyInsurance: monthlyInsurance(inputs),
     monthlyPmi: pmi,
     pmiMonths: pmiMonths(inputs),
@@ -808,6 +832,7 @@ export function computeResults(inputs: DealInputs): DealResults {
     monthlyCashFlowItemized: cashFlowItemized,
     roiItemized: returnOnCash(cashFlowItemized, cashInvested(inputs)),
     allInCost: allInCost(inputs),
+    equityAtPurchase: equityAtPurchase(inputs),
     maxOfferSeventyRule: maxOfferSeventyRule(inputs),
     passesSeventyRule: passesSeventyRule(inputs),
     cashInvested: cashInvested(inputs),

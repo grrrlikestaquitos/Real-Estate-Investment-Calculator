@@ -1,12 +1,15 @@
-import type { DealResults } from '../lib/calculations'
+import { FRONT_RATIO_PASS_PERCENT, type DealResults } from '../lib/calculations'
 import { formatCurrency, formatCurrencyExact, formatPercent } from '../lib/format'
-import type { DealInputs, DealType } from '../lib/types'
+import { GLOSSARY, type GlossaryEntry } from '../lib/glossary'
+import { ANALYSIS_HORIZONS, type DealType } from '../lib/types'
+import { InfoTip } from './InfoTip'
 
 interface KeyMetric {
   key: string
   label: string
   value: string
   tone?: 'positive' | 'negative'
+  info?: GlossaryEntry
 }
 
 /** Green for gains, red for losses; neutral when unavailable. */
@@ -15,61 +18,90 @@ function signTone(value: number | null): KeyMetric['tone'] {
   return value < 0 ? 'negative' : 'positive'
 }
 
+const perMonth = (value: number | null) => (value == null ? '—' : `${formatCurrency(value)}/mo`)
+
+const FIVE_YEARS = ANALYSIS_HORIZONS.indexOf(5)
+
 interface KeyMetricsProps {
   dealType: DealType
-  inputs: DealInputs
   results: DealResults
 }
 
-export function KeyMetrics({ dealType, inputs, results }: KeyMetricsProps) {
-  const rateTerm =
-    inputs.loanRate == null
-      ? inputs.loanTerm != null
-        ? `${inputs.loanTerm} yr`
-        : '—'
-      : inputs.loanTerm != null
-        ? `${formatPercent(inputs.loanRate)} / ${inputs.loanTerm} yr`
-        : formatPercent(inputs.loanRate)
-
-  const common: KeyMetric[] = [
-    { key: 'price', label: 'Sale Price', value: formatCurrency(inputs.propertyValue) },
-    { key: 'tax', label: 'Property Tax / yr', value: formatCurrency(results.annualTaxAtSale) },
-    { key: 'rate', label: 'Fixed Rate / Term', value: rateTerm },
-    { key: 'payment', label: 'Monthly Payment', value: formatCurrencyExact(results.monthlyMortgage) },
-  ]
+/**
+ * Headline numbers the inputs don't already show: what the deal costs up front,
+ * what it pays or costs each month, and what it builds.
+ */
+export function KeyMetrics({ dealType, results }: KeyMetricsProps) {
+  const itemized = results.expenseBasis === 'itemized'
+  const basis = itemized ? 'Itemized' : '25% Rule'
+  const cashFlow = itemized ? results.monthlyCashFlowItemized : results.monthlyCashFlowTwentyFiveRule
+  const cashOnCash = itemized ? results.roiItemized : results.roiTwentyFiveRule
 
   const metrics: KeyMetric[] =
     dealType === 'investment'
       ? [
-          ...common,
-          { key: 'arv', label: 'ARV / Market Value', value: formatCurrency(inputs.propertyArvValue) },
-          results.expenseBasis === 'itemized'
-            ? {
-                key: 'cashflow',
-                label: 'Monthly Cash Flow (Itemized)',
-                value: formatCurrencyExact(results.monthlyCashFlowItemized),
-                tone: signTone(results.monthlyCashFlowItemized),
-              }
-            : {
-                key: 'cashflow',
-                label: 'Monthly Cash Flow (25% Rule)',
-                value: formatCurrencyExact(results.monthlyCashFlowTwentyFiveRule),
-                tone: signTone(results.monthlyCashFlowTwentyFiveRule),
-              },
+          {
+            key: 'cash',
+            label: 'Cash Needed',
+            value: formatCurrency(results.cashInvested),
+            info: GLOSSARY.cashNeeded,
+          },
+          { key: 'payment', label: 'Monthly Payment', value: formatCurrencyExact(results.monthlyMortgage) },
+          {
+            key: 'cashflow',
+            label: `Monthly Cash Flow (${basis})`,
+            value: formatCurrencyExact(cashFlow),
+            tone: signTone(cashFlow),
+            info: itemized ? undefined : GLOSSARY.twentyFiveRule,
+          },
+          {
+            key: 'coc',
+            label: `Cash-on-Cash (${basis})`,
+            value: formatPercent(cashOnCash),
+            tone: signTone(cashOnCash),
+            info: GLOSSARY.cashOnCash,
+          },
+          {
+            key: 'equity',
+            label: 'Equity at Purchase',
+            value: formatCurrency(results.equityAtPurchase),
+            tone: signTone(results.equityAtPurchase),
+            info: GLOSSARY.equityAtPurchase,
+          },
+          {
+            key: 'left',
+            label: 'Cash Left After Refi',
+            value: formatCurrency(results.cashLeftInDeal),
+            info: GLOSSARY.cashLeftInDeal,
+          },
         ]
       : [
-          ...common,
+          {
+            key: 'cash',
+            label: 'Cash to Close',
+            value: formatCurrency(results.cashToClose),
+            info: GLOSSARY.cashToClose,
+          },
+          { key: 'payment', label: 'Monthly Payment', value: formatCurrencyExact(results.monthlyMortgage) },
           {
             key: 'ownership',
             label: 'Monthly Ownership Cost',
             value: formatCurrencyExact(results.monthlyOwnershipCost),
+            info: GLOSSARY.ownershipCost,
           },
           {
-            key: 'savings',
-            label: 'Monthly Savings vs Rent',
-            value: formatCurrencyExact(results.rentVsBuyMonthly),
-            tone: signTone(results.rentVsBuyMonthly),
+            key: 'income',
+            label: `Income Needed (${FRONT_RATIO_PASS_PERCENT}% Rule)`,
+            value: perMonth(results.incomeForFrontRatio),
+            info: GLOSSARY.frontRatio,
           },
+          {
+            key: 'equity',
+            label: 'Equity in 5 Years',
+            value: formatCurrency(results.equityByHorizon[FIVE_YEARS]),
+            info: GLOSSARY.equity,
+          },
+          { key: 'interest', label: 'Total Interest Paid', value: formatCurrency(results.totalInterest) },
         ]
 
   return (
@@ -81,7 +113,10 @@ export function KeyMetrics({ dealType, inputs, results }: KeyMetricsProps) {
         }`
         return (
           <div key={metric.key} className={className}>
-            <span className="key-metric-label">{metric.label}</span>
+            <span className="key-metric-label">
+              {metric.label}
+              {metric.info ? <InfoTip {...metric.info} /> : null}
+            </span>
             <span className="key-metric-value">{metric.value}</span>
           </div>
         )

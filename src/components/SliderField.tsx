@@ -21,6 +21,8 @@ interface SliderFieldProps {
   onBlur?: () => void
   /** Extra controls under the slider (e.g. quick-pick buttons). */
   children?: ReactNode
+  /** A "?" tip explaining the label. */
+  info?: ReactNode
 }
 
 /** The number in a placeholder like "e.g. 8" or "Auto 0.5". */
@@ -53,6 +55,7 @@ export function SliderField({
   onFocus,
   onBlur,
   children,
+  info,
 }: SliderFieldProps) {
   const parsed = parseInput(value)
   const empty = parsed == null
@@ -66,7 +69,10 @@ export function SliderField({
     <div className="field field-wide slider-field">
       <div className="slider-field-head">
         <div className="slider-field-text">
-          <label htmlFor={id}>{label}</label>
+          <div className="field-label-row">
+            <label htmlFor={id}>{label}</label>
+            {info}
+          </div>
           {hint ? (
             <div id={hintId} className="field-hint">
               {hint}

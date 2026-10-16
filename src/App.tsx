@@ -19,12 +19,14 @@ import {
 } from './lib/format'
 import { copyText } from './lib/clipboard'
 import { exportDealsJson, parseImportedDeals } from './lib/storage'
+import { GLOSSARY } from './lib/glossary'
 import { ANALYSIS_HORIZONS } from './lib/types'
 import { ComparisonTable } from './components/ComparisonTable'
 import { DealForm } from './components/DealForm'
 import { DealHeader } from './components/DealHeader'
 import { DealIndicators } from './components/DealIndicators'
 import { DealTabs } from './components/DealTabs'
+import { InfoTip } from './components/InfoTip'
 import { KeyMetrics } from './components/KeyMetrics'
 import { LineChart } from './components/LineChart'
 import { Section } from './components/Section'
@@ -325,7 +327,7 @@ export default function App() {
 
               <div className="layout-results" ref={resultsRef}>
                 <DealIndicators dealType={activeDeal.type} results={results} />
-                <KeyMetrics dealType={activeDeal.type} inputs={activeDeal.inputs} results={results} />
+                <KeyMetrics dealType={activeDeal.type} results={results} />
 
                 <div className="results-grid">
                   {isInvestor ? (
@@ -392,6 +394,7 @@ export default function App() {
                           />
                           <StatRow
                             label="Front Ratio (Housing Cost / Income)"
+                            info={<InfoTip {...GLOSSARY.frontRatio} />}
                             value={formatPercent(results.frontRatioPct)}
                           />
                         </div>
@@ -542,6 +545,7 @@ export default function App() {
                           />
                           <StatRow
                             label="Monthly Cash Flow (50% Rule)"
+                            info={<InfoTip {...GLOSSARY.fiftyRule} />}
                             value={formatCurrencyExact(results.monthlyCashFlowFiftyRule)}
                             tone={cashFlowTone(results.monthlyCashFlowFiftyRule)}
                           />
@@ -552,6 +556,7 @@ export default function App() {
                           />
                           <StatRow
                             label="Monthly Cash Flow (25% Rule)"
+                            info={<InfoTip {...GLOSSARY.twentyFiveRule} />}
                             value={formatCurrencyExact(results.monthlyCashFlowTwentyFiveRule)}
                             tone={cashFlowTone(results.monthlyCashFlowTwentyFiveRule)}
                           />
