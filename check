@@ -1,0 +1,9 @@
+#!/bin/sh
+# What the gate runs. Tier 1 of lane.config.json is this script and nothing else, so the
+# project's tests go here and the config does not change when they arrive.
+#
+# It passes, and says every time that it looked at nothing: a green that checked nothing
+# should not read like one that did. Replace the two lines below with the real thing —
+#   exec npm test        exec .venv/bin/python -m pytest -q        exec go test ./...
+echo "  check: nothing is checked yet. Put this project's tests in ./check."
+exit 0

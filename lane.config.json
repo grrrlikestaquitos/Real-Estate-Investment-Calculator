@@ -1,0 +1,45 @@
+{
+  "note": [
+    "What brrr-calculator is, for the lane tooling. Written by lanekit's adopt as a starting point:",
+    "INSTALL.md in lanekit says what each key decides and how to find the answer in this",
+    "repository. Until `roots` and `gate` are filled in, every change earns tier 1, which",
+    "runs ./check."
+  ],
+  "name": "brrr-calculator",
+  "slug": "brrr-calculator",
+  "integrationBranch": "master",
+  "roots": {},
+  "gate": {
+    "sides": {},
+    "seam": [],
+    "generated": [],
+    "tiers": {
+      "1": {
+        "label": "the check script",
+        "steps": [
+          {
+            "what": "running ./check",
+            "command": "{repo}/check",
+            "args": []
+          }
+        ]
+      }
+    }
+  },
+  "lane": {
+    "portBase": 8201,
+    "portCeiling": 8299,
+    "copyOnCreate": [
+      ".env"
+    ],
+    "linkOnCreate": [],
+    "env": {
+      "file": ".env",
+      "portKey": "PORT",
+      "perLane": {}
+    },
+    "makeDirs": [],
+    "seed": [],
+    "provision": []
+  }
+}
