@@ -66,6 +66,19 @@ Testing Library.
 - **Property tax rate reference** — a collapsible table of 2026 total property tax
   rates for 59 greater Seattle area cities (King + Snohomish counties, official
   county assessor publications); one click fills the Property Tax Rate input.
+- **Find listings (Zillow)** — bring listings from a Zillow search page into the
+  calculator and screen them by price range. A small snippet (`public/zillow-extractor.js`)
+  you run in your own browser's console on the search page copies the visible
+  listings to your clipboard (and downloads them as `.json`); paste or import the
+  result, then set a min/max price and a **buffer %** (default 10). Listings are
+  bucketed live into **In range** and **Within +buffer**; one click on
+  **New deal** starts an investor deal with the listing's price and size filled in.
+
+  Why the snippet? Browsers can't fetch Zillow directly (CORS), and Zillow's bot
+  protection rejects requests from servers, so the fetch happens in your own,
+  already-authenticated browser session — the app does the filtering. Treat it as
+  a personal tool: keep the volume low, and note that automated collection is
+  against Zillow's terms of service.
 
 ## What it calculates
 
@@ -124,10 +137,15 @@ yarn dev        # start the dev server (http://localhost:5173)
 ## Project structure
 
 ```
+public/
+  zillow-extractor.js  Runs in the user's browser on a Zillow search page:
+                       copies the visible listings to the clipboard and downloads
+                       them as .json (served as-is by the app)
 src/
   lib/
     types.ts          Deal model + default inputs
     calculations.ts   Pure metric functions (no React, fully unit-tested)
+    listings.ts       Listing model + price-range/buffer filtering for Find listings
     storage.ts        localStorage persistence, shareable-link codec, JSON backups
     clipboard.ts      Clipboard helper
     format.ts         Currency/percent formatting + live digit grouping for inputs
@@ -135,11 +153,13 @@ src/
     taxRates.ts       Greater Seattle 2026 property tax rates (reference data)
   hooks/
     useDeals.ts       Deal state: create/duplicate/rename/delete/restore/import + persistence
+    useListings.ts    Find-listings state: range/buffer inputs (persisted), imported payload
     useToast.ts       Transient messages with an optional Undo action
     useTheme.ts       Light/dark theme (OS default, saved override)
     useCompareSelection.ts  Which deals the comparison includes
     useViewport.ts    Media queries, on-screen keyboard inset, in-view tracking
-  components/         UI building blocks (fields, cards, tables, indicators)
+  components/         UI building blocks (fields, cards, tables, indicators),
+                      incl. ListingsView/ListingCard for the Find-listings tool
   App.tsx             Page layout
 ```
 
@@ -177,5 +197,10 @@ src/
   cumulative comparison once it ends.
 - The affordability check uses the **28% front ratio** (housing cost vs gross
   income); it does not model back ratio (DTI) or down-payment sources.
+- Find listings works on a **snapshot** of one Zillow search page (the listings
+  visible when you run the snippet, capped at 100); price range and buffer are
+  applied to that snapshot, not to Zillow's live results. If Zillow's page
+  markup changes and the snippet stops matching, the extraction code is
+  isolated in `public/zillow-extractor.js` (selector list near `findCards`).
 
 Developed & maintained by Andrei Villasana.

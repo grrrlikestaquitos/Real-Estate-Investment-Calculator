@@ -1,0 +1,8 @@
+# One service publishes one port, the one lab.conf's HEALTH names (DEPLOYING.md).
+services:
+  app:
+    build: .
+    ports: ["8801:8000"]
+    environment: {PORT: "8000"}
+    volumes: ["${APPDATA}/data:/data"]
+    restart: unless-stopped

@@ -2240,6 +2240,203 @@ td.negative {
   font-variant-numeric: tabular-nums;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Find listings                                                               */
+/* -------------------------------------------------------------------------- */
+
+.deal-tab-listings {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.listings-steps {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.listings-steps strong {
+  color: var(--text);
+}
+
+.listings-steps code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95em;
+}
+
+.listings-copy-snippet {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.listings-query {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.listings-import {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--border-faint);
+  padding-top: 14px;
+}
+
+.listings-import-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.listings-import-textarea {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.listings-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.note-error {
+  color: var(--negative);
+}
+
+.listings-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 6px;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+
+.listings-summary-stat strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.listings-summary-buffer {
+  color: var(--text-faint);
+}
+
+.listings-group-title {
+  margin: 18px 0 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.listings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.listing-card {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
+.listing-card-buffered {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: transparent;
+}
+
+.listing-card-photo {
+  width: 84px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--bg-hover);
+}
+
+.listing-card-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.listing-card-price {
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+a.listing-card-price:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.listing-card-buffered .listing-card-price-value {
+  color: var(--text-dim);
+}
+
+.listing-card-address {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+
+.listing-card-location {
+  color: var(--text-dim);
+}
+
+.listing-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.listing-card-buffer-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .listing-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .listing-card-photo {
+    display: none;
+  }
+}
+
 @media print {
   @page {
     margin: 12mm;

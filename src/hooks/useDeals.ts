@@ -67,8 +67,12 @@ export function useDeals() {
     [deals, activeId],
   )
 
-  function createDealAction(name?: string, type: DealType = DEFAULT_DEAL_TYPE) {
-    const deal = createDeal(name?.trim() || `Deal ${deals.length + 1}`, type)
+  function createDealAction(
+    name?: string,
+    type: DealType = DEFAULT_DEAL_TYPE,
+    inputs: DealInputs = { ...DEFAULT_INPUTS },
+  ) {
+    const deal = createDeal(name?.trim() || `Deal ${deals.length + 1}`, type, inputs)
     setDeals((prev) => [...prev, deal])
     setActiveId(deal.id)
     return deal.id

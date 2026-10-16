@@ -1,0 +1,13 @@
+# What a build leaves out of the image (lab detect). The server keeps the real .env in this
+# folder, beside compose.yaml: without these lines a `COPY . .` would copy its secrets into
+# the image.
+.env
+.env.*
+!.env.example
+.git
+.lab-results
+node_modules
+.venv
+__pycache__
+dist
+*.log

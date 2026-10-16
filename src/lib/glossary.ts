@@ -100,4 +100,8 @@ export const GLOSSARY = {
     term: 'equity',
     text: 'Home value minus what you still owe. It grows as you pay down the loan and as the home appreciates (enter an appreciation rate to project it).',
   },
+  priceBuffer: {
+    term: 'price buffer',
+    text: 'Headroom above your max price, as a percent of it. Listings priced above the max but within the buffer appear in a second group, so a slightly-over-asking property still makes the screen.',
+  },
 } satisfies Record<string, GlossaryEntry>

@@ -1,9 +1,11 @@
 #!/bin/sh
-# What the gate runs. Tier 1 of lane.config.json is this script and nothing else, so the
-# project's tests go here and the config does not change when they arrive.
-#
-# It passes, and says every time that it looked at nothing: a green that checked nothing
-# should not read like one that did. Replace the two lines below with the real thing —
-#   exec npm test        exec .venv/bin/python -m pytest -q        exec go test ./...
-echo "  check: nothing is checked yet. Put this project's tests in ./check."
-exit 0
+# The lab's test entry point (lab.conf TEST=./check): runs the full suite and
+# writes JUnit XML for the platform's report. Runs the same way in the part's
+# image, on the lab's runner, or by hand (DEPLOYING.md, "The test contract").
+set -eu
+cd "$(dirname "$0")"
+
+results="${LAB_RESULTS:-/tmp/lab-results}"
+mkdir -p "$results"
+
+yarn vitest run --reporter=default --reporter=junit --outputFile="$results/junit.xml"
