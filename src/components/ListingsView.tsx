@@ -6,6 +6,7 @@ import { formatCurrency, formatCurrencyCompact, formatPercent } from '../lib/for
 import { GLOSSARY } from '../lib/glossary'
 import { copyText } from '../lib/clipboard'
 import { bufferedMax, type Listing } from '../lib/listings'
+import { parseZillowUrl, withPriceAndSort, ZILLOW_URL_ERRORS } from '../lib/zillowUrl'
 import { useListings } from '../hooks/useListings'
 import { Field } from './Field'
 import { InfoTip } from './InfoTip'
@@ -29,11 +30,24 @@ export function ListingsView({ deal, results, onNewDeal, notify }: ListingsViewP
   const fileRef = useRef<HTMLInputElement>(null)
   const [pasted, setPasted] = useState('')
   const [copyingSnippet, setCopyingSnippet] = useState(false)
+  const [sortLowHigh, setSortLowHigh] = useState(true)
 
   const { min, max, bufferPct, buckets, payload, total } = listings
   const showBufferGroup = max != null && bufferPct != null && bufferPct > 0
 
   const dealCeiling = results.maxOfferSeventyRule ?? deal.inputs.propertyValue
+
+  // The Zillow search URL's own filters take the buffered ceiling, so the page
+  // that loads contains both in-range and buffer listings.
+  const ceiling = max == null ? null : bufferedMax(max, bufferPct)
+  const urlState = listings.query.url.trim() ? parseZillowUrl(listings.query.url) : null
+  const openUrl = urlState?.ok
+    ? withPriceAndSort(listings.query.url, min, ceiling, sortLowHigh)
+    : null
+  const openUrlLabel =
+    min != null || ceiling != null
+      ? `${min != null ? formatCurrency(min) : 'any'} – ${ceiling != null ? formatCurrency(ceiling) : 'any'}`
+      : 'no price filter'
 
   async function copySnippet() {
     setCopyingSnippet(true)
@@ -80,30 +94,60 @@ export function ListingsView({ deal, results, onNewDeal, notify }: ListingsViewP
         >
           <ol className="listings-steps">
             <li>
-              <strong>Search on Zillow</strong> in your browser — any area. Price filters there are
-              optional; the range below does the filtering.
+              <strong>Set your area on Zillow</strong> — zoom the map to a neighborhood or search a
+              place — then copy the URL from the address bar and paste it below.
             </li>
             <li>
-              <strong>Run the snippet</strong> on the search page: copy it, then press F12 → Console
+              <strong>Open the filtered search</strong> — set your range, and <em>Open on Zillow</em>
+              re-opens that search with your prices applied to Zillow's own filters (cheapest first),
+              so the page that loads is already scoped.
+            </li>
+            <li>
+              <strong>Run the snippet</strong> on that search page: copy it, then press F12 → Console
               on Zillow, paste, and press Enter. It copies the listings to your clipboard and
               downloads them as a <code>.json</code> file.
             </li>
             <li>
-              <strong>Bring them here</strong> — paste the JSON below or import the downloaded file —
-              then set your range. <em>New deal</em> on any listing starts a deal with the price and
-              size filled in.
+              <strong>Bring them here</strong> — paste the JSON or import the file.{' '}
+              <em>New deal</em> on any listing starts a deal with the price and size filled in.
             </li>
           </ol>
-          <button
-            type="button"
-            className="btn listings-copy-snippet"
-            disabled={copyingSnippet}
-            onClick={() => void copySnippet()}
-          >
-            {copyingSnippet ? 'Copying…' : 'Copy snippet'}
-          </button>
 
           <div className="listings-query">
+            <Field
+              id="listings-url"
+              label="Zillow search URL"
+              value={listings.query.url}
+              onChange={(v) => listings.updateQuery({ url: v })}
+              placeholder="https://www.zillow.com/homes/…"
+              hint={
+                urlState != null && !urlState.ok
+                  ? ZILLOW_URL_ERRORS[urlState.reason]
+                  : 'Address bar of a Zillow search — a place search or a map you have zoomed to'
+              }
+            />
+            {urlState?.ok ? (
+              <div className="listings-open-row">
+                <label className="listings-sort-toggle">
+                  <input
+                    type="checkbox"
+                    checked={sortLowHigh}
+                    onChange={(e) => setSortLowHigh(e.target.checked)}
+                  />
+                  Sort by price, low → high
+                </label>
+                {openUrl ? (
+                  <a
+                    className="btn btn-small listings-open-btn"
+                    href={openUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open on Zillow · {openUrlLabel}
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
             <Field
               id="listings-min"
               label="Min price"
@@ -150,6 +194,15 @@ export function ListingsView({ deal, results, onNewDeal, notify }: ListingsViewP
               }
             />
           </div>
+
+          <button
+            type="button"
+            className="btn listings-copy-snippet"
+            disabled={copyingSnippet}
+            onClick={() => void copySnippet()}
+          >
+            {copyingSnippet ? 'Copying…' : 'Copy snippet'}
+          </button>
 
           <div className="listings-import">
             <label htmlFor="listings-paste" className="listings-import-label">

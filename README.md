@@ -67,12 +67,16 @@ Testing Library.
   rates for 59 greater Seattle area cities (King + Snohomish counties, official
   county assessor publications); one click fills the Property Tax Rate input.
 - **Find listings (Zillow)** — bring listings from a Zillow search page into the
-  calculator and screen them by price range. A small snippet (`public/zillow-extractor.js`)
-  you run in your own browser's console on the search page copies the visible
-  listings to your clipboard (and downloads them as `.json`); paste or import the
-  result, then set a min/max price and a **buffer %** (default 10). Listings are
-  bucketed live into **In range** and **Within +buffer**; one click on
-  **New deal** starts an investor deal with the listing's price and size filled in.
+  calculator and screen them by price range. Paste the search URL (a place search
+  or a map you zoomed to) and set a min/max price with a **buffer %** (default
+  10): **Open on Zillow** re-opens that search with your range (max + buffer)
+  applied to Zillow's own price filter, sorted cheapest-first, so the page that
+  loads is already scoped. A small snippet (`public/zillow-extractor.js`) run in
+  your own browser's console on that page copies the visible listings to your
+  clipboard (and downloads them as `.json`); paste or import the result and the
+  listings bucket live into **In range** and **Within +buffer**. One click on
+  **New deal** starts an investor deal with the listing's price and size filled
+  in.
 
   Why the snippet? Browsers can't fetch Zillow directly (CORS), and Zillow's bot
   protection rejects requests from servers, so the fetch happens in your own,

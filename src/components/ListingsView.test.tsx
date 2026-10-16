@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { computeResults } from '../lib/calculations'
@@ -13,6 +13,10 @@ const deal: Deal = {
   createdAt: 0,
   updatedAt: 0,
 }
+
+// A real Zillow map search URL (area = bounding box), as copied from the address bar.
+const MAP_SEARCH_URL =
+  'https://www.zillow.com/homes/for_sale/?category=SEMANTIC&searchQueryState=%7B%22isMapVisible%22%3Atrue%2C%22mapBounds%22%3A%7B%22west%22%3A-122.38707035134401%2C%22east%22%3A-122.2325751120862%2C%22south%22%3A47.668900406942974%2C%22north%22%3A47.76037464289794%7D%2C%22filterState%22%3A%7B%22sort%22%3A%7B%22value%22%3A%22globalrelevanceex%22%7D%7D%2C%22isListVisible%22%3Atrue%2C%22mapZoom%22%3A13%7D'
 
 const LISTINGS_JSON = JSON.stringify({
   listings: [
@@ -93,5 +97,38 @@ describe('ListingsView', () => {
     await pasteListings(user, LISTINGS_JSON)
     expect(screen.queryByText(/doesn't look like listings json/i)).toBeNull()
     expect(screen.getByText('450 Easy St')).toBeInTheDocument()
+  })
+
+  it("reopens the search on Zillow with the range applied to Zillow's own filters", async () => {
+    const user = userEvent.setup()
+    renderView()
+
+    const urlField = screen.getByLabelText('Zillow search URL')
+    await fireEvent.change(urlField, { target: { value: MAP_SEARCH_URL } })
+    await user.type(screen.getByLabelText('Min price'), '200000')
+    await user.type(screen.getByLabelText('Max price'), '500000')
+
+    const link = screen.getByRole('link', { name: /open on zillow/i })
+    const state = JSON.parse(
+      new URL(link.getAttribute('href') ?? '').searchParams.get('searchQueryState') ?? '',
+    ) as {
+      filterState: { price: { min: number; max: number }; sort: { value: string } }
+      mapZoom: number
+    }
+    // Max is the buffered ceiling (500k + 10%) so buffer listings load too.
+    expect(state.filterState.price).toEqual({ min: 200000, max: 550000 })
+    expect(state.filterState.sort).toEqual({ value: 'price_asc' })
+    // The map search's own area state survives the rewrite.
+    expect(state.mapZoom).toBe(13)
+    expect(link).toHaveAttribute('target', '_blank')
+  })
+
+  it('flags a pasted URL that is not a Zillow search', async () => {
+    renderView()
+    await fireEvent.change(screen.getByLabelText('Zillow search URL'), {
+      target: { value: 'https://www.redfin.com/homes' },
+    })
+    expect(screen.getByText(/doesn't look like a zillow url/i)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /open on zillow/i })).toBeNull()
   })
 })

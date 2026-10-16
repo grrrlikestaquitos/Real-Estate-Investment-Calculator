@@ -2278,6 +2278,28 @@ td.negative {
   margin-bottom: 16px;
 }
 
+.listings-open-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+
+.listings-sort-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.listings-open-btn {
+  white-space: nowrap;
+}
+
 .listings-import {
   display: grid;
   gap: 8px;

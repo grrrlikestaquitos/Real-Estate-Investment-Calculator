@@ -12,12 +12,15 @@ const STORAGE_KEY = 'brrr-calculator/listings/v1'
 
 /** The search parameters as raw input strings. */
 export interface ListingsQueryStrings {
+  /** The Zillow search URL the area search was made from (address bar copy). */
+  url: string
   min: string
   max: string
   bufferPct: string
 }
 
 const DEFAULT_QUERY: ListingsQueryStrings = {
+  url: '',
   min: '',
   max: '',
   bufferPct: String(DEFAULT_BUFFER_PCT),
@@ -25,8 +28,13 @@ const DEFAULT_QUERY: ListingsQueryStrings = {
 
 function isQueryStrings(value: unknown): value is ListingsQueryStrings {
   if (value == null || typeof value !== 'object') return false
-  const { min, max, bufferPct } = value as Record<string, unknown>
-  return typeof min === 'string' && typeof max === 'string' && typeof bufferPct === 'string'
+  const { url, min, max, bufferPct } = value as Record<string, unknown>
+  return (
+    typeof url === 'string' &&
+    typeof min === 'string' &&
+    typeof max === 'string' &&
+    typeof bufferPct === 'string'
+  )
 }
 
 function loadQuery(): ListingsQueryStrings {
