@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -134,11 +134,75 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
     await user.type(screen.getByLabelText('Sale Price'), '320000')
-    await user.click(screen.getByRole('button', { name: '20% down' }))
+    await user.click(screen.getByRole('button', { name: '20%' }))
 
     expect(screen.getByLabelText('Loan Amount')).toHaveValue('256,000')
-    expect(screen.getByRole('button', { name: '20% down' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText('$64,000 down (20.0% of price)')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '20%' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Down Payment')).toHaveValue('20')
+    expect(screen.getByText('$64,000 down')).toBeInTheDocument()
+  })
+
+  it('sets the down payment by slider or by typing a percent, and follows the loan amount', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const slider = screen.getByRole('slider', { name: 'Adjust down payment' })
+    expect(slider).toBeDisabled()
+
+    await user.type(screen.getByLabelText('Sale Price'), '400000')
+    fireEvent.change(slider, { target: { value: '25' } })
+    expect(screen.getByLabelText('Loan Amount')).toHaveValue('300,000')
+    expect(screen.getByLabelText('Down Payment')).toHaveValue('25')
+
+    await user.clear(screen.getByLabelText('Down Payment'))
+    await user.type(screen.getByLabelText('Down Payment'), '10')
+    expect(screen.getByLabelText('Loan Amount')).toHaveValue('360,000')
+
+    await user.clear(screen.getByLabelText('Loan Amount'))
+    await user.type(screen.getByLabelText('Loan Amount'), '380000')
+    expect(screen.getByLabelText('Down Payment')).toHaveValue('5')
+    expect(screen.getByText('$20,000 down')).toBeInTheDocument()
+  })
+
+  it('moves a rate with its slider and shows what it costs', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.type(screen.getByLabelText('Sale Price'), '400000')
+    await user.click(screen.getByRole('button', { name: '20%' }))
+
+    const rate = screen.getByRole('slider', { name: 'Adjust fixed rate' })
+    expect(rate).toHaveAttribute('aria-valuetext', 'Not set')
+    fireEvent.change(rate, { target: { value: '6.5' } })
+    expect(screen.getByLabelText('Fixed Rate')).toHaveValue('6.5')
+    expect(rate).toHaveAttribute('aria-valuetext', '6.5%')
+    expect(screen.getByText('$2,023/mo principal & interest')).toBeInTheDocument()
+
+    // Typing outside the slider's span is kept; the slider pins to its end
+    await user.clear(screen.getByLabelText('Fixed Rate'))
+    await user.type(screen.getByLabelText('Fixed Rate'), '14')
+    expect(rate).toHaveValue('12')
+    const stored = JSON.parse(window.localStorage.getItem('brrr-calculator/deals/v1') ?? '[]')
+    expect(stored[0].inputs.loanRate).toBe(14)
+  })
+
+  it('picks a common loan term in one tap, or types another', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const term = screen.getByRole('radiogroup', { name: 'Loan Term' })
+    expect(within(term).getByRole('radio', { name: '30 yr' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByRole('textbox', { name: 'Loan Term' })).not.toBeInTheDocument()
+
+    await user.click(within(term).getByRole('radio', { name: '15 yr' }))
+    const storedTerm = () =>
+      JSON.parse(window.localStorage.getItem('brrr-calculator/deals/v1') ?? '[]')[0].inputs.loanTerm
+    expect(storedTerm()).toBe(15)
+
+    await user.click(within(term).getByRole('radio', { name: 'Other' }))
+    const box = screen.getByRole('textbox', { name: 'Loan Term' })
+    expect(box).toHaveFocus()
+    expect(box).toHaveValue('15')
+    await user.keyboard('25')
+    expect(storedTerm()).toBe(25)
+    expect(within(term).getByRole('radio', { name: 'Other' })).toHaveAttribute('aria-checked', 'true')
   })
 
   it('clears the input fields and can undo it', async () => {
@@ -325,19 +389,21 @@ describe('App', () => {
   it('adds estimated PMI for homeowners under 20% down', async () => {
     const user = userEvent.setup()
     render(<App />)
-    // Investors get investment-loan picks; homeowners get low-down options
-    expect(screen.queryByRole('button', { name: '3.5% down' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: 'Homeowner' }))
-
     await user.type(screen.getByLabelText('Sale Price'), '400000')
+    // Investors get investment-loan picks; homeowners get low-down options
+    expect(screen.getByRole('button', { name: '15%' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '3.5%' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Homeowner' }))
+    expect(screen.getByRole('button', { name: '3.5%' })).toBeInTheDocument()
+
     await user.type(screen.getByLabelText('Fixed Rate'), '6')
-    await user.click(screen.getByRole('button', { name: '5% down' }))
+    await user.click(screen.getByRole('button', { name: '5%' }))
 
     // 380k × 0.5% / 12
     const pmi = screen.getByText(/^PMI \(est\. 0\.5%\/yr\), ends ~year \d+$/).closest('.stat-row') as HTMLElement
     expect(within(pmi).getByText('$158.33')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '20% down' }))
+    await user.click(screen.getByRole('button', { name: '20%' }))
     expect(screen.getByText('None (20%+ down)')).toBeInTheDocument()
   })
 })
