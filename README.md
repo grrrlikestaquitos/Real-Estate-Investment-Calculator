@@ -72,9 +72,14 @@ Testing Library.
   10): **Open on Zillow** re-opens that search with your range (max + buffer)
   applied to Zillow's own price filter, sorted cheapest-first, so the page that
   loads is already scoped. A small snippet (`public/zillow-extractor.js`) run in
-  your own browser's console on that page copies the visible listings to your
-  clipboard (and downloads them as `.json`); paste or import the result and the
-  listings bucket live into **In range** and **Within +buffer**. One click on
+  your own browser's console on that page waits up to 10 s for the list to
+  finish loading, then copies the visible listings to your clipboard (and
+  downloads them as `.json`). A result panel with **Copy JSON** /
+  **Download .json** buttons appears in the corner — clicking those works even
+  where the console itself is blocked (e.g. Safari) — and the console prints
+  the JSON object as the snippet's return value. Paste or import the result and
+  the listings bucket live into **In range** and **Within +buffer**. One click
+  on
   **New deal** starts an investor deal with the listing's price and size filled
   in.
 
@@ -143,8 +148,9 @@ yarn dev        # start the dev server (http://localhost:5173)
 ```
 public/
   zillow-extractor.js  Runs in the user's browser on a Zillow search page:
-                       copies the visible listings to the clipboard and downloads
-                       them as .json (served as-is by the app)
+                       polls for the list to hydrate, copies the visible listings
+                       to the clipboard, downloads them as .json, and shows a
+                       Copy/Download result panel (served as-is by the app)
 src/
   lib/
     types.ts          Deal model + default inputs
@@ -205,6 +211,10 @@ src/
   visible when you run the snippet, capped at 100); price range and buffer are
   applied to that snapshot, not to Zillow's live results. If Zillow's page
   markup changes and the snippet stops matching, the extraction code is
-  isolated in `public/zillow-extractor.js` (selector list near `findCards`).
+  isolated in `public/zillow-extractor.js`: cards are found in three layers
+  (`knownCards` → `anchorCards` → `climbCards`), so class-name drift is
+  tolerated as long as listings still link to `/homes/` pages; the snippet also
+  waits up to 10 s for the list to hydrate and its error panel names the likely
+  cause (e.g. map-only view with the results list closed).
 
 Developed & maintained by Andrei Villasana.
