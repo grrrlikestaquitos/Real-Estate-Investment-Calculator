@@ -90,6 +90,7 @@ describe('parseListingsInput', () => {
   const payload = JSON.stringify({
     fetchedAt: 1700000000000,
     source: 'https://www.zillow.com/homes/for-sale/98101_rb/',
+    total: 13000,
     listings: [
       { price: 500000, address: '123 Pine St', url: 'https://z/a' },
       { price: 520000, address: '456 Maple St', url: 'https://z/b' },
@@ -102,6 +103,7 @@ describe('parseListingsInput', () => {
     const parsed = parseListingsInput(payload)
     expect(parsed?.fetchedAt).toBe(1700000000000)
     expect(parsed?.source).toBe('https://www.zillow.com/homes/for-sale/98101_rb/')
+    expect(parsed?.total).toBe(13000)
     expect(parsed?.listings.map((l) => l.address)).toEqual(['123 Pine St', '456 Maple St'])
   })
 
@@ -110,6 +112,7 @@ describe('parseListingsInput', () => {
     expect(parsed?.listings).toHaveLength(1)
     expect(parsed?.fetchedAt).toBeNull()
     expect(parsed?.source).toBeNull()
+    expect(parsed?.total).toBeNull()
   })
 
   it('returns null for invalid JSON, non-listing data, or no valid rows', () => {

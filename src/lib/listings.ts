@@ -25,6 +25,8 @@ export interface ListingsPayload {
   fetchedAt: number | null
   /** Where the listings came from (Zillow URL), if known. */
   source: string | null
+  /** Zillow's own total for the search (e.g. 13000 for "13k homes"), if known. */
+  total: number | null
   listings: Listing[]
 }
 
@@ -151,9 +153,11 @@ export function parseListingsInput(text: string): ListingsPayload | null {
       : {}
   const fetchedAtRaw = meta.fetchedAt
   const source = typeof meta.source === 'string' ? meta.source : null
+  const totalRaw = meta.total
   return {
     fetchedAt: typeof fetchedAtRaw === 'number' && Number.isFinite(fetchedAtRaw) ? fetchedAtRaw : null,
     source,
+    total: typeof totalRaw === 'number' && Number.isFinite(totalRaw) ? totalRaw : null,
     listings,
   }
 }

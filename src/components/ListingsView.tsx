@@ -267,7 +267,11 @@ export function ListingsView({ deal, results, onNewDeal, notify }: ListingsViewP
           wide
           subtitle={
             payload
-              ? `${total} imported${payload.fetchedAt ? ` · captured ${new Date(payload.fetchedAt).toLocaleString()}` : ''}`
+              ? `${total} imported${payload.fetchedAt ? ` · captured ${new Date(payload.fetchedAt).toLocaleString()}` : ''}${
+                  payload.total != null && payload.total > total
+                    ? ` · ≈ ${payload.total.toLocaleString('en-US')} on Zillow`
+                    : ''
+                }`
               : 'Import listings to see them filtered by your range'
           }
         >

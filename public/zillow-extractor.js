@@ -2,9 +2,10 @@
  * Zillow listing extractor.
  *
  * Runs in YOUR browser, on a Zillow search results page. It reads the listings
- * shown on the page, copies them to the clipboard as JSON, downloads them as a
- * .json file, and shows a small panel with Copy/Download buttons (clicking
- * those works even where the console can't write the clipboard directly, e.g.
+ * shown on the page (auto-scrolling the list to load more when it appears to
+ * lazy-load), copies them to the clipboard as JSON, downloads them as a .json
+ * file, and shows a small panel with Copy/Download buttons (clicking those
+ * works even where the console can't write the clipboard directly, e.g.
  * Safari). The console also receives the JSON object as the result.
  *
  * How to run: open a Zillow search, press F12 → Console (Safari: Develop →
@@ -27,9 +28,13 @@
   const STREET_ANY_RE =
     /\b(\d{1,7}[\s-][A-Z][A-Za-z0-9'’. -]*?\s(?:St|Street|Ave|Avenue|Rd|Road|Ln|Lane|Dr|Drive|Ct|Court|Pl|Place|Blvd|Boulevard|Way|Ter|Terrace|Cir|Circle|Trl|Trail)\.?)\b/
   const CITY_ANY_RE = /\b([A-Z][a-z]+(?: [A-Z][a-z]+)*, [A-Z]{2} \d{5}(?:-\d+)?)\b/
+  const COMBINED_LINE_RE =
+    /^(.*?),\s*([A-Z][a-z]+(?: [A-Z][a-z]+)*,\s*[A-Z]{2}\s+\d{5}(?:-\d+)?)$/
   const BEDS_RE = /(\d+(?:\.\d+)?)\s*(?:beds?|bd)\b/i
   const BATHS_RE = /(\d+(?:\.\d+)?)\s*(?:baths?|full baths?|ba)\b/i
   const SQFT_RE = /([\d,]+)\s*(?:sq\.?\s?ft\.?|sqft)\b/i
+  const HOMES_SELECTOR = 'a[href*="/homes/"]'
+  const CAP = 100
 
   function toNumber(value) {
     if (value == null) return null
@@ -37,8 +42,14 @@
     return Number.isFinite(n) && value !== '' ? n : null
   }
 
-  function textOf(el) {
-    return el.innerText || el.textContent || ''
+  /**
+   * Card text with real line breaks: consecutive text nodes sharing the same
+   * parent form one line, and lines are joined with newlines. Unlike innerText
+   * (absent in some DOMs), this is deterministic everywhere, so "123 Pine St"
+   * and "Seattle, WA 98101" never smear into "StSeattle".
+   */
+  function cardText(el) {
+    return textLines(el).join('\n')
   }
 
   /**
@@ -90,6 +101,13 @@
       address = m ? m[1].trim() : null
     }
     if (!address) return null
+    // A line like "123 Pine St, Seattle, WA 98101" carries both at once.
+    const combined = address.match(COMBINED_LINE_RE)
+    if (combined) {
+      const street = combined[1].trim()
+      if (street) address = street
+      location = combined[2]
+    }
     if (!location) {
       const m = full.match(CITY_ANY_RE)
       location = m ? m[1] : null
@@ -101,7 +119,7 @@
     const photo = card.querySelector('img[src]')
     const link =
       card.querySelector('a[href*="/homes/"][href*="_zpb"]') ||
-      card.querySelector('a[href*="/homes/"]')
+      card.querySelector(HOMES_SELECTOR)
 
     return {
       price,
@@ -115,7 +133,18 @@
     }
   }
 
-  /** Cards by Zillow's known attributes (fast path). */
+  /** Number of distinct /homes/ link targets inside an element. */
+  function distinctHomesHrefs(el) {
+    const hrefs = new Set()
+    for (const a of el.querySelectorAll(HOMES_SELECTOR)) hrefs.add(a.href)
+    return hrefs.size
+  }
+
+  /**
+   * Cards by Zillow's known attributes (fast path). An element holding more
+   * than one distinct listing link is a list CONTAINER, not a card — the class
+   * substring can match a list wrapper, so those are filtered out.
+   */
   function knownCards() {
     const selectors = [
       '[data-test="search-result"]',
@@ -125,34 +154,48 @@
     ]
     for (const selector of selectors) {
       const els = document.querySelectorAll(selector)
-      if (els.length > 0) return Array.from(els)
+      if (!els.length) continue
+      const kept = Array.from(els).filter((el) => distinctHomesHrefs(el) < 2)
+      if (kept.length) return kept
     }
     return []
   }
 
   /**
-   * Cards via their listing links: any anchor to a /homes/ page, grouped by
-   * the nearest list item / article / section (or parent as a last resort).
-   * Survives class-name changes, since the link is Zillow's stable contract.
+   * The smallest ancestor of a listing link that has a price and a street and
+   * points at exactly one listing. Survives class-name changes, since the
+   * /homes/ link is Zillow's stable contract.
    */
+  function smallestCardFor(anchor) {
+    let el = anchor.parentElement
+    while (el && el !== document.body) {
+      if (distinctHomesHrefs(el) > 1) return null
+      const text = cardText(el)
+      if (PRICE_REAL_RE.test(text) && (STREET_ANY_RE.test(text) || STREET_RE.test(text))) {
+        return el
+      }
+      el = el.parentElement
+    }
+    return null
+  }
+
+  /** Cards via their listing links, deduped by link target. */
   function anchorCards() {
     const cards = new Map()
-    const anchors = document.querySelectorAll('a[href*="/homes/"]')
-    for (const a of anchors) {
-      const card = a.closest('li, article, section') || a.parentElement
-      if (!card) continue
-      if (!PRICE_RE.test(textOf(card))) continue
-      if (!cards.has(a.href)) cards.set(a.href, card)
+    for (const a of document.querySelectorAll(HOMES_SELECTOR)) {
+      if (cards.has(a.href)) continue
+      const card = smallestCardFor(a)
+      if (card) cards.set(a.href, card)
     }
     return Array.from(cards.values())
   }
 
   /**
-   * Last resort: walk from each price text node up to the smallest ancestor
-   * that also holds a /homes/ link. Works even when the card markup uses
-   * plain divs with no recognizable class or list structure.
+   * Last resort for pages with no recognizable card structure: climb from each
+   * price text node up to a small element that also holds a street address.
+   * Works on plain divs with no links and no recognizable classes.
    */
-  function climbCards() {
+  function clusterCards() {
     const cards = new Map()
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
     let node
@@ -160,9 +203,11 @@
       if (!PRICE_REAL_RE.test(node.textContent || '')) continue
       let el = node.parentElement
       while (el && el !== document.body) {
-        const link = el.querySelector ? el.querySelector('a[href*="/homes/"]') : null
-        if (link) {
-          if (!cards.has(link.href)) cards.set(link.href, el)
+        if ((el.textContent || '').length > 600) break
+        const text = cardText(el)
+        if ((text.match(PRICE_REAL_RE) || []).length > 2) break
+        if (STREET_ANY_RE.test(text) || STREET_RE.test(text)) {
+          if (!cards.has(el)) cards.set(el, el)
           break
         }
         el = el.parentElement
@@ -171,24 +216,39 @@
     return Array.from(cards.values())
   }
 
-  /** All listings visible on this page, deduped, capped at 100. */
-  function extractListings() {
-    let cards = knownCards()
-    if (cards.length === 0) cards = anchorCards()
-    if (cards.length === 0) cards = climbCards()
-
+  function extractRows(cards) {
     const out = []
     const seen = new Set()
     for (const card of cards) {
       const row = extractFromCard(card)
       if (!row) continue
-      const key = row.url || row.address
+      const key = `${row.price}|${row.address}|${row.url}`
       if (seen.has(key)) continue
       seen.add(key)
       out.push(row)
-      if (out.length >= 100) break
+      if (out.length >= CAP) break
     }
     return out
+  }
+
+  /**
+   * All listings visible on this page, deduped, capped at CAP. The three
+   * discovery layers are tried in order; the most productive wins, so a
+   * container mis-match in layer one cannot cap the result at one card.
+   */
+  function extractListings() {
+    const finders = [knownCards, anchorCards, clusterCards]
+    let best = []
+    for (const find of finders) {
+      const rows = extractRows(find())
+      if (rows.length > best.length) best = rows
+      if (best.length >= 2) break
+    }
+    return best
+  }
+
+  function looksLikeSearchPage() {
+    return /\/homes\//.test(location.pathname) || /searchQueryState/.test(location.search)
   }
 
   /** Pure (so it is unit-tested): pick the message for an empty extraction. */
@@ -203,7 +263,66 @@
     return 'No listings are loaded on this page yet. Wait for the list to finish loading and run this again.'
   }
 
+  /** Zillow's own count for this search ("13k homes for sale"), if visible. */
+  function pageTotal() {
+    const text = document.body ? document.body.innerText || document.body.textContent || '' : ''
+    const m =
+      text.match(/([\d,.]+)\s*(k|m)?\s+homes?\s+for sale/i) ||
+      text.match(/([\d,.]+)\s*(k|m)?\s+homes?/i)
+    if (!m) return null
+    const n = Number(m[1].replace(/,/g, ''))
+    if (!Number.isFinite(n) || n <= 0) return null
+    const mult = /m/i.test(m[2]) ? 1e6 : /k/i.test(m[2]) ? 1e3 : 1
+    return Math.round(n * mult)
+  }
+
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  /** The scrollable element that holds the results list, if any. */
+  function findScrollContainer() {
+    const anchor = document.querySelector(HOMES_SELECTOR)
+    if (!anchor) return null
+    let el = anchor.parentElement
+    while (el && el !== document.body) {
+      const overflow = getComputedStyle(el).overflowY
+      if (/(auto|scroll|overlay)/.test(overflow) && el.scrollHeight > el.clientHeight + 10) {
+        return el
+      }
+      el = el.parentElement
+    }
+    return null
+  }
+
+  /**
+   * Scroll the results list to load more cards (Zillow lazy-loads as you
+   * scroll). Stops after `steps`, once nothing new appears twice in a row,
+   * or at the cap.
+   */
+  async function loadMore(cfg) {
+    const steps = cfg.scrollSteps ?? 10
+    const pauseMs = cfg.scrollPauseMs ?? 600
+    const stallLimit = cfg.scrollStall ?? 2
+    const scroller = findScrollContainer()
+    let prev = extractListings().length
+    let stall = 0
+    for (let i = 0; i < steps; i += 1) {
+      if (prev >= CAP) break
+      try {
+        if (scroller) scroller.scrollTop = scroller.scrollHeight
+        else window.scrollBy(0, Math.round(window.innerHeight * 0.9))
+      } catch {
+        break
+      }
+      await sleep(pauseMs)
+      const now = extractListings().length
+      if (now > prev) {
+        prev = now
+        stall = 0
+      } else if (++stall >= stallLimit) {
+        break
+      }
+    }
+  }
 
   function panelButton(label, onClick) {
     const b = document.createElement('button')
@@ -259,6 +378,20 @@
     Object.assign(status.style, { fontSize: '12.5px', lineHeight: '1.45', marginBottom: '4px' })
     el.appendChild(status)
 
+    if (payload.total != null && payload.total > payload.listings.length) {
+      const totalLine = document.createElement('div')
+      totalLine.textContent = `Zillow lists ≈ ${payload.total.toLocaleString(
+        'en-US',
+      )} for this search — this holds the loaded listings (narrow the search or scroll for more).`
+      Object.assign(totalLine.style, {
+        fontSize: '12px',
+        lineHeight: '1.45',
+        opacity: '0.8',
+        marginTop: '4px',
+      })
+      el.appendChild(totalLine)
+    }
+
     if (payload.listings.length > 0) {
       const row = document.createElement('div')
       Object.assign(row.style, { display: 'flex', gap: '8px', marginTop: '8px' })
@@ -297,20 +430,49 @@
 
   /**
    * Poll for the listing cards (Zillow is a React app; the list hydrates a
-   * moment after load), then extract, copy, download, and show the panel.
-   * Polling cadence is overridable for tests:
-   *   window.__ZILLOW_EXTRACT_POLL__ = { everyMs: 20, maxPolls: 20 }
+   * moment after load), auto-scroll for more if the page is a search that
+   * lazy-loads, then extract, copy, download, and show the panel. Polling and
+   * scroll cadence are overridable for tests:
+   *   window.__ZILLOW_EXTRACT_POLL__ = {
+   *     everyMs: 20, maxPolls: 5,
+   *     scrollSteps: 2, scrollPauseMs: 10, scrollStall: 2,
+   *     scroll: false
+   *   }
    */
   async function run() {
-    const poll = window.__ZILLOW_EXTRACT_POLL__ || { everyMs: 500, maxPolls: 20 }
-    let listings = []
-    for (let attempt = 0; attempt < poll.maxPolls; attempt++) {
+    const cfg = window.__ZILLOW_EXTRACT_POLL__ || {
+      everyMs: 500,
+      maxPolls: 20,
+      scrollSteps: 10,
+      scrollPauseMs: 600,
+      scrollStall: 2,
+    }
+    let listings = extractListings()
+    let poll = 0
+    while (listings.length === 0 && poll < cfg.maxPolls) {
+      await sleep(cfg.everyMs)
+      poll += 1
       listings = extractListings()
-      if (listings.length > 0) break
-      if (attempt < poll.maxPolls - 1) await sleep(poll.everyMs)
+    }
+    if (listings.length < 2 && cfg.scroll !== false && looksLikeSearchPage()) {
+      const scroller = findScrollContainer()
+      const doc = document.documentElement
+      const moreToLoad =
+        (scroller ? scroller.scrollHeight > scroller.clientHeight + 50 : false) ||
+        (doc ? doc.scrollHeight > window.innerHeight + 50 : false)
+      if (moreToLoad) {
+        await loadMore(cfg)
+        const after = extractListings()
+        if (after.length > listings.length) listings = after
+      }
     }
 
-    const payload = { source: location.href, fetchedAt: Date.now(), listings }
+    const payload = {
+      source: location.href,
+      fetchedAt: Date.now(),
+      total: pageTotal(),
+      listings,
+    }
     if (listings.length === 0) {
       showPanel(
         payload,
@@ -359,7 +521,7 @@
   }
 
   // Exposed for tests (the app page runs the script top-to-bottom instead).
-  window.__zillowExtract = { extractListings, run, notFoundMessage }
+  window.__zillowExtract = { extractListings, run, notFoundMessage, pageTotal }
   // The test suite sets this flag before evaluating the script so it can
   // inspect the API without the side effects of a real run.
   return window.__ZILLOW_EXTRACT_NO_AUTO_RUN__ ? undefined : run()
