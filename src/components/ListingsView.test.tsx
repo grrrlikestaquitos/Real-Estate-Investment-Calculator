@@ -18,7 +18,7 @@ vi.mock('virtual:mls-data', async () => {
           csv([
             ...rows,
             { id: '1777', price: 480000, original: 540000, sqft: 1500, remarks: 'Fixer with a DADU.' },
-            { id: '1888', price: 650000, sqft: 900, style: '32 - Townhouse', hoa: [300, 'Monthly'] },
+            { id: '1888', price: 650000, sqft: 900, city: 'Bothell', style: '32 - Townhouse', hoa: [300, 'Monthly'] },
           ]),
         ),
       },
@@ -72,6 +72,32 @@ describe('ListingsView', () => {
     expect(addresses()).toEqual(['1888 12th Ave SE'])
     await user.type(screen.getByLabelText('Max HOA'), '200')
     expect(screen.getByText(/No listings match/)).toBeInTheDocument()
+  })
+
+  it('filters by one or more checked cities', async () => {
+    const user = userEvent.setup()
+    renderView()
+    await loaded()
+    await user.click(screen.getByRole('checkbox', { name: /^Bothell/ }))
+    expect(addresses()).toEqual(['1888 12th Ave SE'])
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: /^Everett/ }))
+    expect(screen.getByText('6 of 6 listings match your filters')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByText('All')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /^Bothell/ })).not.toBeChecked()
+  })
+
+  it('carries a city saved by the earlier single-city filter over as a checked city', async () => {
+    window.localStorage.setItem(
+      'brrr-calculator/listings/v2',
+      JSON.stringify({ filters: { city: 'Bothell', hideRestricted: true } }),
+    )
+    renderView()
+    await screen.findByText('1 of 6 listings match your filters')
+    expect(screen.getByRole('checkbox', { name: /^Bothell/ })).toBeChecked()
   })
 
   it('shortlists listings and remembers them', async () => {

@@ -21,7 +21,8 @@ export interface FilterStrings {
   minBeds: string
   maxHoa: string
   types: PropertyType[]
-  city: string
+  /** Cities to include (empty = every city). */
+  cities: string[]
   priceCutOnly: boolean
   valueAddOnly: boolean
   hideRestricted: boolean
@@ -37,7 +38,7 @@ const DEFAULT_FILTER_STRINGS: FilterStrings = {
   minBeds: '',
   maxHoa: '',
   types: [],
-  city: '',
+  cities: [],
   priceCutOnly: false,
   valueAddOnly: false,
   hideRestricted: true,
@@ -59,6 +60,16 @@ interface Saved {
   imported: MlsDataset[]
 }
 
+/** Saved filters over the defaults; an earlier single `city` becomes a one-city list. */
+function loadFilters(saved: unknown): FilterStrings {
+  if (saved == null || typeof saved !== 'object') return { ...DEFAULT_FILTER_STRINGS }
+  const { city, ...rest } = saved as Partial<FilterStrings> & { city?: unknown }
+  const filters = { ...DEFAULT_FILTER_STRINGS, ...rest }
+  if (!Array.isArray(filters.cities)) filters.cities = []
+  if (typeof city === 'string' && city && filters.cities.length === 0) filters.cities = [city]
+  return filters
+}
+
 function load(): Saved {
   const fallback: Saved = {
     filters: { ...DEFAULT_FILTER_STRINGS },
@@ -74,7 +85,7 @@ function load(): Saved {
     const saved = JSON.parse(raw) as Partial<Saved> | null
     if (saved == null || typeof saved !== 'object') return fallback
     return {
-      filters: { ...fallback.filters, ...saved.filters },
+      filters: loadFilters(saved.filters),
       assumptions: { ...fallback.assumptions, ...saved.assumptions },
       disabled: Array.isArray(saved.disabled) ? saved.disabled : [],
       shortlist: Array.isArray(saved.shortlist) ? saved.shortlist : [],
@@ -95,7 +106,7 @@ function toFilters(f: FilterStrings): ScreenFilters {
     minBeds: parseInput(f.minBeds),
     maxHoa: parseInput(f.maxHoa),
     types: f.types,
-    city: f.city,
+    cities: f.cities,
     priceCutOnly: f.priceCutOnly,
     valueAddOnly: f.valueAddOnly,
     hideRestricted: f.hideRestricted,
