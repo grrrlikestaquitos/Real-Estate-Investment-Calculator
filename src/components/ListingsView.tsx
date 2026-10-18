@@ -1,337 +1,390 @@
 import { useRef, useState, type ChangeEvent } from 'react'
-import type { Deal } from '../lib/types'
-import type { DealResults } from '../lib/calculations'
-import { SEVENTY_RULE_PERCENT } from '../lib/calculations'
-import { formatCurrency, formatCurrencyCompact, formatPercent } from '../lib/format'
-import { GLOSSARY } from '../lib/glossary'
-import { copyText } from '../lib/clipboard'
-import { bufferedMax, type Listing } from '../lib/listings'
-import { parseZillowUrl, withPriceAndSort, ZILLOW_URL_ERRORS } from '../lib/zillowUrl'
-import { useListings } from '../hooks/useListings'
+import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
+import { PROPERTY_TYPE_LABELS, type PropertyType } from '../lib/mls'
+import {
+  LARGE_LOT_SQFT,
+  RENT_TAPER_SQFT,
+  SORT_LABELS,
+  type ListingAnalysis,
+  type SortKey,
+} from '../lib/screening'
+import { useListings, type FilterStrings } from '../hooks/useListings'
 import { Field } from './Field'
-import { InfoTip } from './InfoTip'
 import { ListingCard } from './ListingCard'
 import { Section } from './Section'
 
 interface ListingsViewProps {
-  deal: Deal
-  results: DealResults
-  onNewDeal: (listing: Listing) => void
+  onNewDeal: (analysis: ListingAnalysis) => void
   notify: (text: string, tone?: 'error') => void
 }
 
+const PAGE_SIZE = 30
+
+type ToggleFilter = {
+  [K in keyof FilterStrings]: FilterStrings[K] extends boolean ? K : never
+}[keyof FilterStrings]
+const TYPES: PropertyType[] = ['house', 'townhouse', 'condo', 'manufactured']
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
 /**
- * The Find-listings tool: listings extracted from Zillow in the user's own
- * browser (see public/zillow-extractor.js) are imported here as JSON and
- * filtered by the price range, with a buffer that admits a little headroom.
+ * The listings screen: NWMLS exports (bundled from Data/ or imported as CSV)
+ * analyzed as rentals and ranked by a screening score, with filters, the
+ * assumptions behind the numbers, and a shortlist.
  */
-export function ListingsView({ deal, results, onNewDeal, notify }: ListingsViewProps) {
-  const listings = useListings()
+export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
+  const api = useListings()
   const fileRef = useRef<HTMLInputElement>(null)
-  const [pasted, setPasted] = useState('')
-  const [copyingSnippet, setCopyingSnippet] = useState(false)
-  const [sortLowHigh, setSortLowHigh] = useState(true)
+  const { filters, results, assumptionStrings: a } = api
+  // A new filter or sort starts back at the first page.
+  const pageKey = JSON.stringify([filters, api.sort])
+  const [paging, setPaging] = useState({ key: pageKey, shown: PAGE_SIZE })
+  const shown = paging.key === pageKey ? paging.shown : PAGE_SIZE
 
-  const { min, max, bufferPct, buckets, payload, total } = listings
-  const showBufferGroup = max != null && bufferPct != null && bufferPct > 0
-
-  const dealCeiling = results.maxOfferSeventyRule ?? deal.inputs.propertyValue
-
-  // The Zillow search URL's own filters take the buffered ceiling, so the page
-  // that loads contains both in-range and buffer listings.
-  const ceiling = max == null ? null : bufferedMax(max, bufferPct)
-  const urlState = listings.query.url.trim() ? parseZillowUrl(listings.query.url) : null
-  const openUrl = urlState?.ok
-    ? withPriceAndSort(listings.query.url, min, ceiling, sortLowHigh)
-    : null
-  const openUrlLabel =
-    min != null || ceiling != null
-      ? `${min != null ? formatCurrency(min) : 'any'} – ${ceiling != null ? formatCurrency(ceiling) : 'any'}`
-      : 'no price filter'
-
-  async function copySnippet() {
-    setCopyingSnippet(true)
-    try {
-      const res = await fetch('/zillow-extractor.js')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const ok = await copyText(await res.text())
-      if (ok) {
-        notify('Snippet copied. On Zillow: press F12 → Console, paste it, press Enter.')
-      } else {
-        notify("Couldn't copy the snippet — check the site's clipboard permissions.", 'error')
-      }
-    } catch {
-      notify("Couldn't load the snippet. Check that the app is served over http(s).", 'error')
-    } finally {
-      setCopyingSnippet(false)
-    }
+  function checkbox(key: ToggleFilter, label: string) {
+    return (
+      <label className="listings-check">
+        <input
+          type="checkbox"
+          checked={filters[key]}
+          onChange={(e) => api.updateFilters({ [key]: e.target.checked })}
+        />
+        {label}
+      </label>
+    )
   }
 
-  function applyPasted() {
-    if (listings.importText(pasted)) {
-      setPasted('')
-      notify('Listings added.')
-    } else {
-      notify("That didn't parse as listings JSON.", 'error')
-    }
+  function toggleType(type: PropertyType) {
+    const types = filters.types.includes(type)
+      ? filters.types.filter((t) => t !== type)
+      : [...filters.types, type]
+    api.updateFilters({ types })
   }
 
-  async function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
+  async function handleImport(e: ChangeEvent<HTMLInputElement>) {
+    const files = [...(e.target.files ?? [])]
     e.target.value = ''
-    if (!file) return
-    const ok = await listings.importFile(file)
-    if (ok) notify(`Imported ${file.name}`)
-    else notify(`Couldn't import ${file.name}.`, 'error')
+    for (const file of files) {
+      const count = await api.importFile(file)
+      if (count == null) notify(`${file.name} isn't an NWMLS CSV export.`, 'error')
+      else notify(`Imported ${count} listings from ${file.name}`)
+    }
   }
+
+  const medianPrice = median(results.map((r) => r.listing.price))
+  const medianPpsf = median(results.flatMap((r) => (r.pricePerSqft != null ? [r.pricePerSqft] : [])))
+  const bestCap = results.reduce<number | null>(
+    (best, r) => (r.capRate != null && (best == null || r.capRate > best) ? r.capRate : best),
+    null,
+  )
+  const positiveCashFlow = results.filter((r) => (r.cashFlow ?? -1) >= 0).length
 
   return (
     <div className="layout">
-      <div className="layout-side">
-        <Section
-          title="Find listings"
-          subtitle="Filter Zillow listings by your price range, with buffer headroom"
-        >
-          <ol className="listings-steps">
-            <li>
-              <strong>Set your area on Zillow</strong> — zoom the map to a neighborhood or search a
-              place — then copy the URL from the address bar and paste it below.
-            </li>
-            <li>
-              <strong>Open the filtered search</strong> — set your range, and <em>Open on Zillow</em>
-              re-opens that search with your prices applied to Zillow's own filters (cheapest first),
-              so the page that loads is already scoped.
-            </li>
-            <li>
-              <strong>Run the snippet</strong> on that search page: copy it, then press F12 → Console
-              on Zillow, paste, and press Enter. It copies the listings to your clipboard and
-              downloads them as a <code>.json</code> file.
-            </li>
-            <li>
-              <strong>Bring them here</strong> — paste the JSON or import the file.{' '}
-              <em>New deal</em> on any listing starts a deal with the price and size filled in.
-            </li>
-          </ol>
-
-          <div className="listings-query">
-            <Field
-              id="listings-url"
-              label="Zillow search URL"
-              value={listings.query.url}
-              onChange={(v) => listings.updateQuery({ url: v })}
-              placeholder="https://www.zillow.com/homes/…"
-              hint={
-                urlState != null && !urlState.ok
-                  ? ZILLOW_URL_ERRORS[urlState.reason]
-                  : 'Address bar of a Zillow search — a place search or a map you have zoomed to'
-              }
-            />
-            {urlState?.ok ? (
-              <div className="listings-open-row">
-                <label className="listings-sort-toggle">
+      <div className="layout-side listings-side">
+        <Section title="Listings data" subtitle="NWMLS CSV exports — overlapping files are merged">
+          {api.loading ? <p className="note">Loading listings…</p> : null}
+          {api.loadError ? (
+            <p className="note note-error">Couldn't load the bundled listings.</p>
+          ) : null}
+          {!api.loading && api.datasets.length === 0 ? (
+            <p className="note">
+              No data yet. Put NWMLS CSV exports in the <code>Data/</code> folder and rebuild, or
+              import one below.
+            </p>
+          ) : null}
+          <ul className="listings-datasets">
+            {api.datasets.map((d) => (
+              <li key={d.id}>
+                <label className="listings-check">
                   <input
                     type="checkbox"
-                    checked={sortLowHigh}
-                    onChange={(e) => setSortLowHigh(e.target.checked)}
+                    checked={api.isEnabled(d.id)}
+                    onChange={() => api.toggleDataset(d.id)}
                   />
-                  Sort by price, low → high
+                  <span className="listings-dataset-name">{d.name}</span>
+                  <span className="listings-dataset-count">{d.listings.length}</span>
                 </label>
-                {openUrl ? (
-                  <a
-                    className="btn btn-small listings-open-btn"
-                    href={openUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                {api.isImported(d.id) ? (
+                  <button
+                    type="button"
+                    className="btn btn-small btn-ghost"
+                    aria-label={`Remove ${d.name}`}
+                    onClick={() => api.removeImported(d.id)}
                   >
-                    Open on Zillow · {openUrlLabel}
-                  </a>
+                    Remove
+                  </button>
                 ) : null}
-              </div>
-            ) : null}
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="btn btn-small" onClick={() => fileRef.current?.click()}>
+            Import CSV…
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            multiple
+            className="sr-only"
+            tabIndex={-1}
+            aria-label="Import NWMLS CSV exports"
+            onChange={(e) => void handleImport(e)}
+          />
+        </Section>
+
+        <Section title="Filters">
+          <div className="field-grid">
             <Field
               id="listings-min"
               label="Min price"
               prefix="$"
               grouped
-              value={listings.query.min}
-              onChange={(v) => listings.updateQuery({ min: v })}
-              placeholder="200,000"
+              value={filters.minPrice}
+              onChange={(v) => api.updateFilters({ minPrice: v })}
+              placeholder="Any"
             />
             <Field
               id="listings-max"
               label="Max price"
               prefix="$"
               grouped
-              value={listings.query.max}
-              onChange={(v) => listings.updateQuery({ max: v })}
-              placeholder="500,000"
-            >
-              {dealCeiling != null ? (
-                <div className="chips">
-                  <button
-                    type="button"
-                    className="chip"
-                    title={`Uses the ${SEVENTY_RULE_PERCENT}% rule max offer when available, otherwise the sale price`}
-                    onClick={() => listings.updateQuery({ max: String(dealCeiling) })}
-                  >
-                    Use deal ceiling · {formatCurrency(dealCeiling)}
-                  </button>
-                </div>
-              ) : null}
-            </Field>
+              value={filters.maxPrice}
+              onChange={(v) => api.updateFilters({ maxPrice: v })}
+              placeholder="Any"
+            />
             <Field
-              id="listings-buffer"
-              label="Buffer"
-              suffix="%"
-              value={listings.query.bufferPct}
-              onChange={(v) => listings.updateQuery({ bufferPct: v })}
-              placeholder="10"
-              info={<InfoTip {...GLOSSARY.priceBuffer} />}
-              hint={
-                max != null && bufferPct != null
-                  ? `Admits listings up to ${formatCurrencyCompact(bufferedMax(max, bufferPct))}`
-                  : 'Percent headroom above the max price'
-              }
+              id="listings-min-sqft"
+              label="Min size"
+              suffix="sqft"
+              grouped
+              value={filters.minSqft}
+              onChange={(v) => api.updateFilters({ minSqft: v })}
+              placeholder="Any"
             />
-          </div>
-
-          <button
-            type="button"
-            className="btn listings-copy-snippet"
-            disabled={copyingSnippet}
-            onClick={() => void copySnippet()}
-          >
-            {copyingSnippet ? 'Copying…' : 'Copy snippet'}
-          </button>
-
-          <div className="listings-import">
-            <label htmlFor="listings-paste" className="listings-import-label">
-              Or paste the JSON here
-            </label>
-            <textarea
-              id="listings-paste"
-              className="listings-import-textarea"
-              rows={4}
-              value={pasted}
-              spellCheck={false}
-              placeholder='{"listings": [ { "price": 495000, "address": "…" } ]}'
-              onChange={(e) => setPasted(e.target.value)}
+            <Field
+              id="listings-min-beds"
+              label="Min beds"
+              value={filters.minBeds}
+              onChange={(v) => api.updateFilters({ minBeds: v })}
+              placeholder="Any"
             />
-            <div className="listings-import-actions">
-              <button
-                type="button"
-                className="btn btn-small"
-                disabled={pasted.trim() === ''}
-                onClick={applyPasted}
+            <Field
+              id="listings-max-hoa"
+              label="Max HOA"
+              prefix="$"
+              suffix="/mo"
+              value={filters.maxHoa}
+              onChange={(v) => api.updateFilters({ maxHoa: v })}
+              placeholder="Any"
+            />
+            <div className="field">
+              <div className="field-label-row">
+                <label htmlFor="listings-city">City</label>
+              </div>
+              <select
+                id="listings-city"
+                className="listings-select"
+                value={filters.city}
+                onChange={(e) => api.updateFilters({ city: e.target.value })}
               >
-                Add pasted listings
-              </button>
-              <button
-                type="button"
-                className="btn btn-small btn-ghost"
-                onClick={() => fileRef.current?.click()}
-              >
-                Import .json file
-              </button>
-              {payload ? (
-                <button
-                  type="button"
-                  className="btn btn-small btn-ghost"
-                  onClick={() => {
-                    listings.clearResults()
-                    setPasted('')
-                    notify('Listings cleared')
-                  }}
-                >
-                  Clear
-                </button>
-              ) : null}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="application/json,.json"
-                className="sr-only"
-                tabIndex={-1}
-                aria-label="Import listings from a JSON file"
-                onChange={(e) => void handleImportFile(e)}
-              />
+                <option value="">All cities</option>
+                {api.cities.map(([city, count]) => (
+                  <option key={city} value={city}>
+                    {city} ({count})
+                  </option>
+                ))}
+              </select>
             </div>
-            {listings.importError ? <p className="note note-error">{listings.importError}</p> : null}
           </div>
+
+          <div className="listings-filter-group" role="group" aria-label="Property type">
+            <span className="listings-filter-label">Type</span>
+            <div className="chips">
+              {TYPES.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={`chip ${filters.types.includes(type) ? 'chip-active' : ''}`}
+                  aria-pressed={filters.types.includes(type)}
+                  onClick={() => toggleType(type)}
+                >
+                  {PROPERTY_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="listings-checks">
+            {checkbox('priceCutOnly', 'Price reduced')}
+            {checkbox('valueAddOnly', 'Value-add signals (ADU, in-law, fixer…)')}
+            {checkbox('hideRestricted', 'Hide 55+, cash-only and auctions')}
+            {checkbox('shortlistOnly', `Shortlist only (${api.shortlistCount})`)}
+          </div>
+          <button type="button" className="btn btn-small btn-ghost" onClick={api.resetFilters}>
+            Reset filters
+          </button>
+        </Section>
+
+        <Section
+          title="Rental assumptions"
+          subtitle="Used for every listing's rent, cash flow and cap rate"
+        >
+          <div className="field-grid">
+            <Field
+              id="assume-down"
+              label="Down payment"
+              suffix="%"
+              value={a.downPct}
+              onChange={(v) => api.updateAssumptions({ downPct: v })}
+            />
+            <Field
+              id="assume-rate"
+              label="Interest rate"
+              suffix="%"
+              value={a.rate}
+              onChange={(v) => api.updateAssumptions({ rate: v })}
+            />
+            <Field
+              id="assume-rent"
+              label="Rent per sqft"
+              prefix="$"
+              suffix="/mo"
+              value={a.rentPerSqft}
+              onChange={(v) => api.updateAssumptions({ rentPerSqft: v })}
+              hint={`Half rate past ${formatNumber(RENT_TAPER_SQFT)} sqft`}
+            />
+            <Field
+              id="assume-vacancy"
+              label="Vacancy"
+              suffix="% rent"
+              value={a.vacancyPct}
+              onChange={(v) => api.updateAssumptions({ vacancyPct: v })}
+            />
+            <Field
+              id="assume-repairs"
+              label="Repairs & CapEx"
+              suffix="% rent"
+              value={a.repairsPct}
+              onChange={(v) => api.updateAssumptions({ repairsPct: v })}
+            />
+            <Field
+              id="assume-management"
+              label="Management"
+              suffix="% rent"
+              value={a.managementPct}
+              onChange={(v) => api.updateAssumptions({ managementPct: v })}
+            />
+            <Field
+              id="assume-insurance"
+              label="Insurance"
+              suffix="% / yr"
+              value={a.insurancePct}
+              onChange={(v) => api.updateAssumptions({ insurancePct: v })}
+            />
+            <Field
+              id="assume-closing"
+              label="Closing costs"
+              suffix="%"
+              value={a.closingPct}
+              onChange={(v) => api.updateAssumptions({ closingPct: v })}
+            />
+          </div>
+          <p className="note">
+            Property tax uses each city's 2026 rate (the regional median where the city isn't in
+            the table); HOA dues come from the listing.
+          </p>
+          <button type="button" className="btn btn-small btn-ghost" onClick={api.resetAssumptions}>
+            Reset assumptions
+          </button>
         </Section>
       </div>
 
       <div className="layout-results">
         <Section
-          title="Listings"
+          title="Ranked listings"
           wide
           subtitle={
-            payload
-              ? `${total} imported${payload.fetchedAt ? ` · captured ${new Date(payload.fetchedAt).toLocaleString()}` : ''}${
-                  payload.total != null && payload.total > total
-                    ? ` · ≈ ${payload.total.toLocaleString('en-US')} on Zillow`
-                    : ''
-                }`
-              : 'Import listings to see them filtered by your range'
+            api.loading
+              ? 'Loading…'
+              : `${results.length} of ${api.listings.length} listings match your filters`
           }
         >
-          {payload ? (
+          <div className="listings-summary">
+            <span className="listings-summary-stat">
+              Median price <strong>{formatCurrency(medianPrice)}</strong>
+            </span>
+            <span className="listings-summary-stat">
+              Median $/sqft <strong>{formatCurrency(medianPpsf)}</strong>
+            </span>
+            <span className="listings-summary-stat">
+              Best cap rate <strong>{formatPercent(bestCap)}</strong>
+            </span>
+            <span className="listings-summary-stat">
+              Cash flow ≥ $0 <strong>{positiveCashFlow}</strong>
+            </span>
+          </div>
+
+          <div className="listings-toolbar">
+            <label htmlFor="listings-sort">Sort by</label>
+            <select
+              id="listings-sort"
+              className="listings-select"
+              value={api.sort}
+              onChange={(e) => api.setSort(e.target.value as SortKey)}
+            >
+              {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                <option key={key} value={key}>
+                  {SORT_LABELS[key]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <details className="listings-score-help">
+            <summary>How the score works</summary>
+            <p>
+              Out of 100: <strong>value</strong> (35) — $/sqft against the median for the same
+              property type in the same city; <strong>return</strong> (25) — cap rate under your
+              assumptions; <strong>motivation</strong> (20) — price cuts and days on market;{' '}
+              <strong>upside</strong> (20) — ADU, in-law, fixer or investor mentions in the
+              remarks, and house lots of {formatNumber(LARGE_LOT_SQFT)}+ sqft. HOA dues, 55+ or
+              cash-only restrictions, auctions and manufactured homes take points off. It ranks
+              listings against each other — always check the remarks, photos and real rent comps.
+            </p>
+          </details>
+
+          {results.length > 0 ? (
             <>
-              <div className="listings-summary">
-                <span className="listings-summary-stat">
-                  In range <strong>{buckets.inRange.length}</strong>
-                </span>
-                {showBufferGroup ? (
-                  <span className="listings-summary-stat listings-summary-buffer">
-                    Within +{formatPercent(bufferPct)} <strong>{buckets.withinBuffer.length}</strong>
-                  </span>
-                ) : null}
-              </div>
-
-              <h3 className="listings-group-title">
-                In range
-                {min != null || max != null
-                  ? ` (${min != null ? formatCurrency(min) : 'any'} – ${max != null ? formatCurrency(max) : 'any'})`
-                  : ' (no range set)'}
-              </h3>
-              {buckets.inRange.length > 0 ? (
-                <ul className="listings">
-                  {buckets.inRange.map((listing) => (
-                    <ListingCard key={listing.id} listing={listing} onNewDeal={onNewDeal} />
-                  ))}
-                </ul>
-              ) : (
-                <p className="note">No imported listings fall in the range.</p>
-              )}
-
-              {showBufferGroup ? (
-                <>
-                  <h3 className="listings-group-title listings-group-buffer">
-                    Within +{formatPercent(bufferPct)} buffer (up to{' '}
-                    {formatCurrency(bufferedMax(max, bufferPct))})
-                  </h3>
-                  {buckets.withinBuffer.length > 0 ? (
-                    <ul className="listings">
-                      {buckets.withinBuffer.map((listing) => (
-                        <ListingCard
-                          key={listing.id}
-                          listing={listing}
-                          buffered
-                          onNewDeal={onNewDeal}
-                        />
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="note">No imported listings sit in the buffer.</p>
-                  )}
-                </>
+              <ul className="listings">
+                {results.slice(0, shown).map((analysis) => (
+                  <ListingCard
+                    key={analysis.listing.id}
+                    analysis={analysis}
+                    shortlisted={api.isShortlisted(analysis.listing.id)}
+                    onToggleShortlist={api.toggleShortlist}
+                    onNewDeal={onNewDeal}
+                  />
+                ))}
+              </ul>
+              {results.length > shown ? (
+                <button
+                  type="button"
+                  className="btn listings-more"
+                  onClick={() => setPaging({ key: pageKey, shown: shown + PAGE_SIZE })}
+                >
+                  Show {Math.min(PAGE_SIZE, results.length - shown)} more of{' '}
+                  {results.length - shown}
+                </button>
               ) : null}
             </>
-          ) : (
-            <p className="note">
-              No listings yet. Copy the snippet, run it on a Zillow search page, then paste or
-              import the result.
-            </p>
+          ) : api.loading ? null : (
+            <p className="note">No listings match. Loosen a filter or turn a dataset on.</p>
           )}
         </Section>
       </div>

@@ -66,30 +66,24 @@ Testing Library.
 - **Property tax rate reference** — a collapsible table of 2026 total property tax
   rates for 59 greater Seattle area cities (King + Snohomish counties, official
   county assessor publications); one click fills the Property Tax Rate input.
-- **Find listings (Zillow)** — bring listings from a Zillow search page into the
-  calculator and screen them by price range. Paste the search URL (a place search
-  or a map you zoomed to) and set a min/max price with a **buffer %** (default
-  10): **Open on Zillow** re-opens that search with your range (max + buffer)
-  applied to Zillow's own price filter, sorted cheapest-first, so the page that
-  loads is already scoped. A small snippet (`public/zillow-extractor.js`) run in
-  your own browser's console on that page waits up to 10 s for the list to
-  finish loading, auto-scrolls the results list to load more cards (Zillow
-  lazy-loads as you scroll), then copies the visible listings to your
-  clipboard (and downloads them as `.json`). A result panel with **Copy JSON**
-  / **Download .json** buttons appears in the corner — clicking those works
-  even where the console itself is blocked (e.g. Safari) — and shows
-  Zillow's own total for the search (e.g. "≈ 13,000") next to how many the
-  snapshot holds. The console also prints the JSON object as the snippet's
-  return value. Paste or import the result and the listings bucket live into
-  **In range** and **Within +buffer**. One click on
-  **New deal** starts an investor deal with the listing's price and size filled
-  in.
-
-  Why the snippet? Browsers can't fetch Zillow directly (CORS), and Zillow's bot
-  protection rejects requests from servers, so the fetch happens in your own,
-  already-authenticated browser session — the app does the filtering. Treat it as
-  a personal tool: keep the volume low, and note that automated collection is
-  against Zillow's terms of service.
+- **Find listings (NWMLS data)** — screens the NWMLS CSV exports in `Data/`
+  as rentals and ranks them. Each listing gets an estimated rent, cash flow and
+  cap rate under your **rental assumptions** (down payment, rate, rent per
+  sqft, vacancy, repairs, management, insurance, closing costs), its city's
+  property tax rate, and its HOA dues; its **$/sqft is compared** with the
+  median for the same property type in the same city. A **0–100 score** ranks
+  value vs comps, return, seller motivation (price cuts, days on market) and
+  upside (ADU, in-law, fixer or investor mentions in the remarks, large house
+  lots), minus HOA dues and restrictions (55+, cash only, auctions), and every
+  card lists the reasons behind its score. Filter by price, size, beds, HOA,
+  city, property type, price-reduced and value-add; sort by score, discount,
+  cash flow, cap rate, price, $/sqft, price cut, days on market or newest;
+  **★ shortlist** the ones worth a visit (remembered). **Details** shows the
+  full numbers, public remarks and Zillow/Redfin/map links, and **New deal**
+  opens an investor deal with the price, rent, financing, tax, HOA and
+  expenses already filled in. Overlapping exports (5/12/20 mi radius) are
+  merged by listing number and can be toggled; **Import CSV…** adds another
+  export in the browser (remembered there).
 
 ## What it calculates
 
@@ -148,17 +142,13 @@ yarn dev        # start the dev server (http://localhost:5173)
 ## Project structure
 
 ```
-public/
-  zillow-extractor.js  Runs in the user's browser on a Zillow search page:
-                       polls for the list to hydrate, auto-scrolls to load more
-                       cards, copies the visible listings to the clipboard,
-                       downloads them as .json, and shows a Copy/Download
-                       result panel (served as-is by the app)
+Data/                 NWMLS CSV exports, bundled at build time (vite.config.ts)
 src/
   lib/
     types.ts          Deal model + default inputs
     calculations.ts   Pure metric functions (no React, fully unit-tested)
-    listings.ts       Listing model + price-range/buffer filtering for Find listings
+    mls.ts            NWMLS CSV parsing → listings (also used by vite.config.ts)
+    screening.ts      Comps, rent/return estimates, score, filters and sorting
     storage.ts        localStorage persistence, shareable-link codec, JSON backups
     clipboard.ts      Clipboard helper
     format.ts         Currency/percent formatting + live digit grouping for inputs
@@ -166,7 +156,7 @@ src/
     taxRates.ts       Greater Seattle 2026 property tax rates (reference data)
   hooks/
     useDeals.ts       Deal state: create/duplicate/rename/delete/restore/import + persistence
-    useListings.ts    Find-listings state: range/buffer inputs (persisted), imported payload
+    useListings.ts    Find-listings state: datasets, filters, assumptions, sort, shortlist
     useToast.ts       Transient messages with an optional Undo action
     useTheme.ts       Light/dark theme (OS default, saved override)
     useCompareSelection.ts  Which deals the comparison includes
@@ -210,17 +200,16 @@ src/
   cumulative comparison once it ends.
 - The affordability check uses the **28% front ratio** (housing cost vs gross
   income); it does not model back ratio (DTI) or down-payment sources.
-- Find listings works on a **snapshot** of one Zillow search page (the listings
-  the snippet loads — it waits up to 10 s for hydration, auto-scrolls the list
-  to pull in lazy-loaded cards, and is capped at 100); the snippet also reads
-  Zillow's own total for the search so the panel can show e.g. "≈ 13,000 on
-  Zillow". Price range and buffer are applied to that snapshot, not to
-  Zillow's live results. If Zillow's page markup changes and the snippet stops
-  matching, the extraction code is isolated in `public/zillow-extractor.js`:
-  cards are found in three layers (`knownCards` → `anchorCards` →
-  `clusterCards`), list containers are rejected so a class-name drift can't
-  collapse the result to one card, and class-name changes are tolerated as long
-  as listings still link to `/homes/` pages. The error panel names the likely
-  cause (e.g. map-only view with the results list closed).
+- Find listings works on the **snapshot** in the CSV exports; re-export from
+  NWMLS and rebuild (or import the new CSV) to refresh. The exports are parsed
+  at build time and only public fields reach the page: **agent-only remarks are
+  never bundled**. The export leaves out upper-floor bedrooms, so bedrooms come
+  from the remarks ("3-bedroom") when they say, and otherwise show as a floor
+  ("2+ bd") that the Min beds filter doesn't rule out. Rent is an estimate:
+  rent per sqft up to 1,500 sqft and half that beyond (big homes rent for less
+  per foot); check real rent comps before offering. Comps need at least 5
+  listings of the same type in the city, falling back to that type across all
+  data, then to everything. The score ranks listings against each other; it is
+  not an absolute verdict.
 
 Developed & maintained by Andrei Villasana.
