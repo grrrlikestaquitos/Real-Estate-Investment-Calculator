@@ -31,7 +31,7 @@ export function ListingCard({ analysis, shortlisted, onToggleShortlist, onNewDea
   const detailsId = `listing-details-${l.id}`
 
   return (
-    <li className={`listing-card ${shortlisted ? 'listing-card-shortlisted' : ''}`}>
+    <li id={`listing-${l.id}`} className={`listing-card ${shortlisted ? 'listing-card-shortlisted' : ''}`}>
       <div
         className={`listing-score ${scoreTier(analysis.score)}`}
         title="Screening score out of 100: value vs comps, estimated return, seller motivation and upside"

@@ -250,6 +250,11 @@ describe('matchesFilters', () => {
     expect(matchesFilters(house, { ...DEFAULT_FILTERS, cities: ['Bothell'] }, none)).toBe(false)
   })
 
+  it('leaves out hidden ZIP codes', () => {
+    expect(matchesFilters(house, { ...DEFAULT_FILTERS, hiddenZips: ['98208'] }, none)).toBe(false)
+    expect(matchesFilters(house, { ...DEFAULT_FILTERS, hiddenZips: ['98168'] }, none)).toBe(true)
+  })
+
   it("doesn't rule out a listing whose bedroom count is only a floor", () => {
     expect(matchesFilters(house, { ...DEFAULT_FILTERS, minBeds: 3 }, none)).toBe(true)
   })

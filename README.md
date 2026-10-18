@@ -93,6 +93,13 @@ Testing Library.
   homeowner deal (matching the perspective) with the numbers filled in.
   Overlapping exports are merged by listing number and can be toggled;
   **Import CSV…** adds another export in the browser.
+- **Listings map** — an OpenStreetMap map above the list shows the ZIP areas
+  that have listings and a dot per matching listing, colored like its score.
+  **Click a ZIP to hide its listings** (click again to bring them back), or
+  use the **ZIP codes** checklist under Filters; **Hide all ZIPs** then a few
+  clicks gives "only these areas". Hovering a ZIP shows its cities, NWMLS area
+  and how many listings match; a dot's popup jumps to its card. ZIP numbers
+  appear once you zoom in.
 
 ## What it calculates
 
@@ -152,8 +159,11 @@ yarn dev        # start the dev server (http://localhost:5173)
 
 ```
 Data/                 NWMLS CSV exports, bundled at build time (vite.config.ts)
+  geocodes.json       Map positions for the listings' addresses (scripts/geocode.mjs)
 scripts/
   zip-stats.mjs       Regenerates src/lib/zipStats.json from Census ACS files
+  zip-shapes.mjs      Regenerates src/lib/zipShapes.json (Census ZIP boundaries)
+  geocode.mjs         Geocodes new addresses in Data/*.csv into Data/geocodes.json
 src/
   lib/
     types.ts          Deal model + default inputs
@@ -161,6 +171,7 @@ src/
     mls.ts            NWMLS CSV parsing → listings (also used by vite.config.ts)
     screening.ts      Comps, rent and cost estimates, investor/homeowner scores, filters, sorting
     zipStats.json     Median rent and household income by Washington ZIP (Census ACS)
+    zipShapes.json    Simplified Puget Sound ZIP boundaries for the map (2020 Census)
     storage.ts        localStorage persistence, shareable-link codec, JSON backups
     clipboard.ts      Clipboard helper
     format.ts         Currency/percent formatting + live digit grouping for inputs
@@ -229,5 +240,15 @@ src/
   similar-size homes of that type in every city, then that type, then
   everything. The score ranks listings against each other; it is
   not an absolute verdict.
+- The map needs listing positions: after adding or replacing an export in
+  `Data/`, run `node scripts/geocode.mjs` (Node 22.18+) and rebuild. It uses
+  the Census Bureau's batch geocoder, falls back to OpenStreetMap's Nominatim
+  (one request a second) for streets too new for the Census, and drops any
+  point more than about a kilometer outside its own ZIP (a same-named street
+  in another town). About 95% of the current listings are placed; the rest,
+  and CSVs imported in the browser, stay in the list without a dot. ZIP areas
+  are Census ZIP Code Tabulation Areas, which follow postal ZIPs closely but
+  not exactly near their edges. Map tiles come from OpenStreetMap's tile
+  servers, which ask for light, attributed use.
 
 Developed & maintained by Andrei Villasana.

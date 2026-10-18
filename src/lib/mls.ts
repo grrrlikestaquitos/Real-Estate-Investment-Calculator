@@ -99,6 +99,9 @@ export interface MlsListing {
    * home twice, e.g. as a house and as a condo). Filled in by mergeDatasets.
    */
   alsoListedAs?: { id: string; type: PropertyType }[]
+  /** Map position from Data/geocodes.json (scripts/geocode.mjs), when the address was found. */
+  lat?: number
+  lng?: number
 }
 
 /**
@@ -297,6 +300,11 @@ export function normalizeMlsRow(row: Record<string, string>): MlsListing | null 
   }
 }
 
+/** The key a listing's position is saved under in Data/geocodes.json. */
+export function geocodeKey(listing: Pick<MlsListing, 'address' | 'zip'>): string {
+  return `${listing.address.toLowerCase().replace(/\s+/g, ' ')}|${listing.zip}`
+}
+
 /** Parse an NWMLS CSV export. Null when it isn't one (no ListingNumber/price columns). */
 export function parseMlsCsv(text: string): MlsListing[] | null {
   const [header, ...rows] = parseCsv(text)
@@ -339,7 +347,7 @@ export function mergeDatasets(datasets: readonly MlsDataset[]): MlsListing[] {
     for (const listing of dataset.listings) {
       if (seenIds.has(listing.id)) continue
       seenIds.add(listing.id)
-      const key = `${listing.address.toLowerCase().replace(/\s+/g, ' ')}|${listing.zip}`
+      const key = geocodeKey(listing)
       const index = byAddress.get(key)
       if (index == null) {
         byAddress.set(key, merged.length)
@@ -359,4 +367,15 @@ export function mergeDatasets(datasets: readonly MlsDataset[]): MlsListing[] {
     }
   }
   return merged
+}
+
+/** Listings with their map position attached, where the address has one. */
+export function withPositions(
+  listings: MlsListing[],
+  points: Readonly<Record<string, readonly [number, number]>>,
+): MlsListing[] {
+  return listings.map((listing) => {
+    const point = points[geocodeKey(listing)]
+    return point ? { ...listing, lat: point[0], lng: point[1] } : listing
+  })
 }

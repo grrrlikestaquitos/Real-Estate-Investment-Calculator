@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { mlsCsv } from '../test/fixtures/mls'
 import {
   bedsFromRemarks,
+  geocodeKey,
+  withPositions,
   mergeDatasets,
   parseCsv,
   parseMlsCsv,
@@ -110,6 +112,19 @@ describe('helpers', () => {
       ['2584678', [{ id: '2583384', type: 'condo' }]],
       ['2590000', []],
     ])
+  })
+
+  it('attaches saved map positions by address and ZIP', () => {
+    const [placed, unplaced] = parseMlsCsv(
+      mlsCsv([
+        { id: '1234', price: 1, sqft: 1, unit: 'B' },
+        { id: '5678', price: 1, sqft: 1 },
+      ]),
+    )!
+    expect(geocodeKey(placed)).toBe('1234 12th ave se #b|98208')
+    const [a, b] = withPositions([placed, unplaced], { '1234 12th ave se #b|98208': [47.9, -122.2] })
+    expect([a.lat, a.lng]).toEqual([47.9, -122.2])
+    expect(b.lat).toBeUndefined()
   })
 
   it('merges datasets, de-duplicating by listing number', () => {
