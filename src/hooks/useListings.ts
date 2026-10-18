@@ -2,11 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { parseInput } from '../lib/calculations'
 import { mergeDatasets, parseMlsCsv, type MlsDataset, type PropertyType } from '../lib/mls'
 import {
-  DEFAULT_ASSUMPTIONS,
+  DEFAULT_INVESTOR_ASSUMPTIONS,
+  DEFAULT_OWNER_ASSUMPTIONS,
+  SORTS_FOR,
   analyzeListings,
+  buildContext,
   matchesFilters,
   sortAnalyses,
-  type ScreenAssumptions,
+  type Assumptions,
+  type InvestorAssumptions,
+  type OwnerAssumptions,
+  type Perspective,
   type ScreenFilters,
   type SortKey,
 } from '../lib/screening'
@@ -29,7 +35,8 @@ export interface FilterStrings {
   shortlistOnly: boolean
 }
 
-export type AssumptionStrings = Record<keyof ScreenAssumptions, string>
+export type InvestorAssumptionStrings = Record<keyof InvestorAssumptions, string>
+export type OwnerAssumptionStrings = Record<keyof OwnerAssumptions, string>
 
 const DEFAULT_FILTER_STRINGS: FilterStrings = {
   minPrice: '',
@@ -45,22 +52,39 @@ const DEFAULT_FILTER_STRINGS: FilterStrings = {
   shortlistOnly: false,
 }
 
-const DEFAULT_ASSUMPTION_STRINGS = Object.fromEntries(
-  Object.entries(DEFAULT_ASSUMPTIONS).map(([k, v]) => [k, String(v)]),
-) as AssumptionStrings
+/** Defaults as input strings; a 0 ("not entered") shows as an empty input. */
+function asStrings<T extends object>(values: T): Record<keyof T, string> {
+  return Object.fromEntries(
+    Object.entries(values).map(([k, v]) => [k, v === 0 ? '' : String(v)]),
+  ) as Record<keyof T, string>
+}
+
+const DEFAULT_INVESTOR_STRINGS = asStrings(DEFAULT_INVESTOR_ASSUMPTIONS)
+const DEFAULT_OWNER_STRINGS = asStrings(DEFAULT_OWNER_ASSUMPTIONS)
 
 interface Saved {
+  perspective: Perspective
   filters: FilterStrings
-  assumptions: AssumptionStrings
+  investor: InvestorAssumptionStrings
+  owner: OwnerAssumptionStrings
   /** Dataset ids turned off (new datasets start on). */
   disabled: string[]
   shortlist: string[]
-  sort: SortKey
+  sort: Record<Perspective, SortKey>
   /** CSVs the user imported, already parsed. */
   imported: MlsDataset[]
 }
 
-/** Saved filters over the defaults; an earlier single `city` becomes a one-city list. */
+/** Saved settings from before perspectives: one set of (investor) assumptions and one sort. */
+interface SavedV1 {
+  assumptions?: Partial<InvestorAssumptionStrings>
+  sort?: unknown
+}
+
+function savedSort(perspective: Perspective, value: unknown): SortKey {
+  return SORTS_FOR[perspective].includes(value as SortKey) ? (value as SortKey) : 'score'
+}
+
 function loadFilters(saved: unknown): FilterStrings {
   if (saved == null || typeof saved !== 'object') return { ...DEFAULT_FILTER_STRINGS }
   const { city, ...rest } = saved as Partial<FilterStrings> & { city?: unknown }
@@ -72,24 +96,32 @@ function loadFilters(saved: unknown): FilterStrings {
 
 function load(): Saved {
   const fallback: Saved = {
+    perspective: 'investment',
     filters: { ...DEFAULT_FILTER_STRINGS },
-    assumptions: { ...DEFAULT_ASSUMPTION_STRINGS },
+    investor: { ...DEFAULT_INVESTOR_STRINGS },
+    owner: { ...DEFAULT_OWNER_STRINGS },
     disabled: [],
     shortlist: [],
-    sort: 'score',
+    sort: { investment: 'score', owner: 'score' },
     imported: [],
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return fallback
-    const saved = JSON.parse(raw) as Partial<Saved> | null
+    const saved = JSON.parse(raw) as (Partial<Saved> & SavedV1) | null
     if (saved == null || typeof saved !== 'object') return fallback
+    const sort = saved.sort as Partial<Record<Perspective, unknown>> | string | undefined
     return {
+      perspective: saved.perspective === 'owner' ? 'owner' : 'investment',
       filters: loadFilters(saved.filters),
-      assumptions: { ...fallback.assumptions, ...saved.assumptions },
+      investor: { ...fallback.investor, ...(saved.investor ?? saved.assumptions) },
+      owner: { ...fallback.owner, ...saved.owner },
       disabled: Array.isArray(saved.disabled) ? saved.disabled : [],
       shortlist: Array.isArray(saved.shortlist) ? saved.shortlist : [],
-      sort: typeof saved.sort === 'string' ? saved.sort : 'score',
+      sort:
+        typeof sort === 'object' && sort != null
+          ? { investment: savedSort('investment', sort.investment), owner: savedSort('owner', sort.owner) }
+          : { investment: savedSort('investment', sort), owner: 'score' },
       imported: Array.isArray(saved.imported) ? saved.imported : [],
     }
   } catch {
@@ -115,19 +147,20 @@ function toFilters(f: FilterStrings): ScreenFilters {
 }
 
 /** Empty or invalid assumption inputs fall back to the defaults. */
-function toAssumptions(a: AssumptionStrings): ScreenAssumptions {
-  const result = { ...DEFAULT_ASSUMPTIONS }
-  for (const key of Object.keys(result) as (keyof ScreenAssumptions)[]) {
-    const value = parseInput(a[key] ?? '')
-    if (value != null && value >= 0) result[key] = value
+function parseAssumptions<T extends object>(strings: Record<keyof T, string>, defaults: T): T {
+  const result = { ...defaults }
+  for (const key of Object.keys(result) as (keyof T)[]) {
+    const value = parseInput(strings[key] ?? '')
+    if (value != null && value >= 0) result[key] = value as T[keyof T]
   }
   return result
 }
 
 /**
  * State for the listings screen: the NWMLS exports bundled from Data/ (loaded
- * lazily) plus any CSVs the user imports, which datasets are on, the filters,
- * the rental assumptions, the sort and the shortlist. Everything but the
+ * lazily) plus any CSVs the user imports, which datasets are on, the
+ * perspective (investor or homeowner) with its own assumptions and sort, the
+ * filters and the shortlist. Everything but the
  * bundled data is remembered in localStorage.
  */
 export function useListings() {
@@ -137,9 +170,12 @@ export function useListings() {
   const [imported, setImported] = useState<MlsDataset[]>(initial.imported)
   const [disabled, setDisabled] = useState<string[]>(initial.disabled)
   const [filters, setFilters] = useState<FilterStrings>(initial.filters)
-  const [assumptionStrings, setAssumptionStrings] = useState<AssumptionStrings>(initial.assumptions)
+  const [perspective, setPerspective] = useState<Perspective>(initial.perspective)
+  const [investor, setInvestor] = useState<InvestorAssumptionStrings>(initial.investor)
+  const [owner, setOwner] = useState<OwnerAssumptionStrings>(initial.owner)
   const [shortlist, setShortlist] = useState<string[]>(initial.shortlist)
-  const [sort, setSort] = useState<SortKey>(initial.sort)
+  const [sorts, setSorts] = useState<Record<Perspective, SortKey>>(initial.sort)
+  const sort = sorts[perspective]
 
   useEffect(() => {
     let cancelled = false
@@ -160,11 +196,13 @@ export function useListings() {
 
   useEffect(() => {
     const saved: Saved = {
+      perspective,
       filters,
-      assumptions: assumptionStrings,
+      investor,
+      owner,
       disabled,
       shortlist,
-      sort,
+      sort: sorts,
       imported,
     }
     try {
@@ -172,7 +210,7 @@ export function useListings() {
     } catch {
       // Storage blocked or full (a big import): the view still works in memory.
     }
-  }, [filters, assumptionStrings, disabled, shortlist, sort, imported])
+  }, [perspective, filters, investor, owner, disabled, shortlist, sorts, imported])
 
   const datasets = useMemo(() => [...(bundled ?? []), ...imported], [bundled, imported])
   const enabled = useMemo(
@@ -180,8 +218,18 @@ export function useListings() {
     [datasets, disabled],
   )
   const listings = useMemo(() => mergeDatasets(enabled), [enabled])
-  const assumptions = useMemo(() => toAssumptions(assumptionStrings), [assumptionStrings])
-  const analyses = useMemo(() => analyzeListings(listings, assumptions), [listings, assumptions])
+  const context = useMemo(() => buildContext(listings), [listings])
+  const assumptions: Assumptions = useMemo(
+    () =>
+      perspective === 'owner'
+        ? { perspective, values: parseAssumptions(owner, DEFAULT_OWNER_ASSUMPTIONS) }
+        : { perspective, values: parseAssumptions(investor, DEFAULT_INVESTOR_ASSUMPTIONS) },
+    [perspective, investor, owner],
+  )
+  const analyses = useMemo(
+    () => analyzeListings(listings, context, assumptions),
+    [listings, context, assumptions],
+  )
   const shortlistSet = useMemo(() => new Set(shortlist), [shortlist])
   const parsedFilters = useMemo(() => toFilters(filters), [filters])
   const results = useMemo(
@@ -204,8 +252,12 @@ export function useListings() {
     setFilters((current) => ({ ...current, ...patch }))
   }
 
-  function updateAssumptions(patch: Partial<AssumptionStrings>) {
-    setAssumptionStrings((current) => ({ ...current, ...patch }))
+  function updateInvestor(patch: Partial<InvestorAssumptionStrings>) {
+    setInvestor((current) => ({ ...current, ...patch }))
+  }
+
+  function updateOwner(patch: Partial<OwnerAssumptionStrings>) {
+    setOwner((current) => ({ ...current, ...patch }))
   }
 
   function toggleDataset(id: string) {
@@ -251,12 +303,19 @@ export function useListings() {
     filters,
     updateFilters,
     resetFilters: () => setFilters({ ...DEFAULT_FILTER_STRINGS }),
-    assumptionStrings,
+    perspective,
+    setPerspective,
+    investor,
+    updateInvestor,
+    owner,
+    updateOwner,
     assumptions,
-    updateAssumptions,
-    resetAssumptions: () => setAssumptionStrings({ ...DEFAULT_ASSUMPTION_STRINGS }),
+    resetAssumptions: () =>
+      perspective === 'owner'
+        ? setOwner({ ...DEFAULT_OWNER_STRINGS })
+        : setInvestor({ ...DEFAULT_INVESTOR_STRINGS }),
     sort,
-    setSort,
+    setSort: (key: SortKey) => setSorts((current) => ({ ...current, [perspective]: key })),
     isShortlisted: (id: string) => shortlistSet.has(id),
     shortlistCount: shortlist.length,
     toggleShortlist,

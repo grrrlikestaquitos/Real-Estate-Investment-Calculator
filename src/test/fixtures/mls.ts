@@ -25,6 +25,11 @@ export interface Row {
   agentOnly?: string
   year?: number
   bankOwned?: boolean
+  zip?: string
+  view?: string
+  garage?: number
+  /** Street number (defaults to the id's last 4 digits, so addresses are unique). */
+  streetNumber?: string
 }
 
 function quote(cell: string | number): string {
@@ -59,22 +64,22 @@ export function mlsCsv(rows: Row[]): string {
       LotSquareFootage: r.lot ?? 5000,
       MarketingComments: r.remarks ?? 'Lovely home.',
       OriginalPrice: r.original ?? r.price,
-      ParkingCoveredTotal: 2,
+      ParkingCoveredTotal: r.garage ?? 2,
       SquareFootage: r.sqft,
       SquareFootageFinished: r.sqft,
       Status: 'Active',
       StreetDirection: '',
       StreetName: '12th',
-      StreetNumber: r.id.slice(-4),
+      StreetNumber: r.streetNumber ?? r.id.slice(-4),
       StreetNumberModifier: '',
       StreetPostDirection: 'SE',
       StreetSuffix: 'Ave',
       StyleCode: r.style ?? '12 - 2 Story',
       Unit: r.unit ?? '',
-      View: '',
+      View: r.view ?? '',
       Waterfront: '',
       YearBuilt: r.year ?? 1995,
-      'ZipCode ': '98208',
+      'ZipCode ': r.zip ?? '98208',
     }
     return HEADER.map((h) => quote(values[h])).join(',')
   })

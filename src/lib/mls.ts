@@ -27,6 +27,7 @@ export type ListingFlag =
   | 'newConstruction'
   | 'seniors'
   | 'cashOnly'
+  | 'updated'
 
 export const FLAG_LABELS: Record<ListingFlag, string> = {
   adu: 'ADU / DADU',
@@ -39,6 +40,7 @@ export const FLAG_LABELS: Record<ListingFlag, string> = {
   newConstruction: 'New construction',
   seniors: '55+ community',
   cashOnly: 'Cash only',
+  updated: 'Updated / remodeled',
 }
 
 /** Flags that point at upside (extra income, forced appreciation, a motivated seller). */
@@ -92,6 +94,11 @@ export interface MlsListing {
   community: string
   remarks: string
   flags: ListingFlag[]
+  /**
+   * Other listing numbers for the same address (an agent sometimes lists one
+   * home twice, e.g. as a house and as a condo). Filled in by mergeDatasets.
+   */
+  alsoListedAs?: { id: string; type: PropertyType }[]
 }
 
 /**
@@ -192,6 +199,10 @@ const FLAG_PATTERNS: [ListingFlag, RegExp][] = [
   ['rental', /\b(currently rented|tenant[- ]occupied|tenants? in place|leased until|rented until)\b/i],
   ['seniors', /\b55\s?\+|\b55 and older|senior (community|living)/i],
   ['cashOnly', /\bcash only\b|cash buyers? only/i],
+  [
+    'updated',
+    /\b(remodel(ed|ing)?|renovat(ed|ion)|fully updated|newly updated|new (roof|furnace|windows|kitchen|flooring|carpet|paint)|move[- ]in ready)\b/i,
+  ],
 ]
 
 function flagsFor(
@@ -314,15 +325,37 @@ export interface MlsDataset {
   listings: MlsListing[]
 }
 
-/** Union of several datasets, de-duplicated by listing number (first one wins). */
+/**
+ * Union of several datasets: de-duplicated by listing number (first one wins),
+ * then listings of the same address and ZIP folded into one card. NWMLS often
+ * lists a home twice — once as residential and once as a condo — so the
+ * non-condo listing is kept and the others are recorded in `alsoListedAs`.
+ */
 export function mergeDatasets(datasets: readonly MlsDataset[]): MlsListing[] {
-  const seen = new Set<string>()
+  const seenIds = new Set<string>()
+  const byAddress = new Map<string, number>()
   const merged: MlsListing[] = []
   for (const dataset of datasets) {
     for (const listing of dataset.listings) {
-      if (seen.has(listing.id)) continue
-      seen.add(listing.id)
-      merged.push(listing)
+      if (seenIds.has(listing.id)) continue
+      seenIds.add(listing.id)
+      const key = `${listing.address.toLowerCase().replace(/\s+/g, ' ')}|${listing.zip}`
+      const index = byAddress.get(key)
+      if (index == null) {
+        byAddress.set(key, merged.length)
+        merged.push({ ...listing, alsoListedAs: [] })
+        continue
+      }
+      const kept = merged[index]
+      const others = kept.alsoListedAs ?? []
+      if (kept.type === 'condo' && listing.type !== 'condo') {
+        merged[index] = {
+          ...listing,
+          alsoListedAs: [...others, { id: kept.id, type: kept.type }],
+        }
+      } else {
+        kept.alsoListedAs = [...others, { id: listing.id, type: listing.type }]
+      }
     }
   }
   return merged

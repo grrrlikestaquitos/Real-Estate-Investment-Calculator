@@ -97,6 +97,21 @@ describe('helpers', () => {
     expect(bedsFromRemarks('Great views')).toBeNull()
   })
 
+  it('folds the same home listed twice into the residential listing', () => {
+    const [condo, house, other] = parseMlsCsv(
+      mlsCsv([
+        { id: '2583384', streetNumber: '731', price: 650000, sqft: 1455, style: '34 - Condo (3 Levels)' },
+        { id: '2584678', streetNumber: '731', price: 650000, sqft: 1455, style: '32 - Townhouse' },
+        { id: '2590000', streetNumber: '733', price: 650000, sqft: 1455 },
+      ]),
+    )!
+    const merged = mergeDatasets([{ id: 'a', name: 'a', listings: [condo, house, other] }])
+    expect(merged.map((l) => [l.id, l.alsoListedAs])).toEqual([
+      ['2584678', [{ id: '2583384', type: 'condo' }]],
+      ['2590000', []],
+    ])
+  })
+
   it('merges datasets, de-duplicating by listing number', () => {
     const a = parseMlsCsv(mlsCsv([{ id: '1', price: 1, sqft: 1 }, { id: '2', price: 2, sqft: 1 }]))!
     const b = parseMlsCsv(mlsCsv([{ id: '2', price: 2, sqft: 1 }, { id: '3', price: 3, sqft: 1 }]))!

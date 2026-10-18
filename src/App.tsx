@@ -99,13 +99,15 @@ export default function App() {
     setView('deal')
   }
 
-  /** Start a new investor deal from a listing, with the numbers it was screened by. */
-  function handleNewDealFromListing({ listing, dealInputs }: ListingAnalysis) {
-    const id = deals.createDeal(`${listing.address}, ${listing.city}`, 'investment', dealInputs)
+  /** Start a deal from a listing, of the perspective it was screened from, with its numbers. */
+  function handleNewDealFromListing({ listing, dealInputs, perspective }: ListingAnalysis) {
+    const id = deals.createDeal(`${listing.address}, ${listing.city}`, perspective, dealInputs)
     setNewDealId(id)
     setView('deal')
     showToast(
-      `Started "${listing.address}" with the price, estimated rent, financing and expenses filled in.`,
+      perspective === 'owner'
+        ? `Started "${listing.address}" as a homeowner deal with the price, financing, tax, HOA and your income filled in.`
+        : `Started "${listing.address}" with the price, estimated rent, financing and expenses filled in.`,
     )
   }
 
