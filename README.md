@@ -67,23 +67,32 @@ Testing Library.
   rates for 59 greater Seattle area cities (King + Snohomish counties, official
   county assessor publications); one click fills the Property Tax Rate input.
 - **Find listings (NWMLS data)** — screens the NWMLS CSV exports in `Data/`
-  as rentals and ranks them. Each listing gets an estimated rent, cash flow and
-  cap rate under your **rental assumptions** (down payment, rate, rent per
-  sqft, vacancy, repairs, management, insurance, closing costs), its city's
-  property tax rate, and its HOA dues; its **$/sqft is compared** with the
-  median for the same property type in the same city. A **0–100 score** ranks
-  value vs comps, return, seller motivation (price cuts, days on market) and
-  upside (ADU, in-law, fixer or investor mentions in the remarks, large house
-  lots), minus HOA dues and restrictions (55+, cash only, auctions), and every
-  card lists the reasons behind its score. Filter by price, size, beds, HOA,
-  city, property type, price-reduced and value-add; sort by score, discount,
-  cash flow, cap rate, price, $/sqft, price cut, days on market or newest;
-  **★ shortlist** the ones worth a visit (remembered). **Details** shows the
-  full numbers, public remarks and Zillow/Redfin/map links, and **New deal**
-  opens an investor deal with the price, rent, financing, tax, HOA and
-  expenses already filled in. Overlapping exports (5/12/20 mi radius) are
-  merged by listing number and can be toggled; **Import CSV…** adds another
-  export in the browser (remembered there).
+  and ranks them with a **0–100 score from one of two perspectives**, switched
+  at the top of the page (each keeps its own assumptions and sort):
+  - **Investor (Rental)** — estimated rent, cash flow and cap rate under your
+    rental assumptions (down payment, rate, rent per sqft, vacancy, repairs,
+    management, insurance, closing costs). Scores value, cap rate, seller
+    motivation (price cuts, days on market) and upside (ADU, in-law, fixer or
+    investor mentions, large house lots).
+  - **Homeowner** — the monthly cost a lender counts (mortgage, tax,
+    insurance, PMI under 20% down, HOA), its share of your household income,
+    and cash to close. Scores value, affordability, condition (new, recently
+    built or updated; fixers get nothing), livability (yard, 2-car garage,
+    notable view, waterfront) and negotiation room.
+
+  Both penalize HOA dues and restrictions, and every card lists the reasons
+  behind its score. **$/sqft is compared with similar homes**: the same
+  property type in the same city within ±25% of the size. **Rent is scaled
+  by ZIP** using Census median rents, and the details show each ZIP's
+  median rent and household income. NWMLS often lists one home twice (as
+  residential and as a condo); those are **folded into one card** marked
+  "Also listed as Condo". Filter by price, size, beds, HOA, cities
+  (checklist), property type, price-reduced and value-add; **★ shortlist**
+  the ones worth a visit. **Details** shows the full numbers, public remarks
+  and Zillow/Redfin/map links, and **New deal** opens an investor or
+  homeowner deal (matching the perspective) with the numbers filled in.
+  Overlapping exports are merged by listing number and can be toggled;
+  **Import CSV…** adds another export in the browser.
 
 ## What it calculates
 
@@ -143,12 +152,15 @@ yarn dev        # start the dev server (http://localhost:5173)
 
 ```
 Data/                 NWMLS CSV exports, bundled at build time (vite.config.ts)
+scripts/
+  zip-stats.mjs       Regenerates src/lib/zipStats.json from Census ACS files
 src/
   lib/
     types.ts          Deal model + default inputs
     calculations.ts   Pure metric functions (no React, fully unit-tested)
     mls.ts            NWMLS CSV parsing → listings (also used by vite.config.ts)
-    screening.ts      Comps, rent/return estimates, score, filters and sorting
+    screening.ts      Comps, rent and cost estimates, investor/homeowner scores, filters, sorting
+    zipStats.json     Median rent and household income by Washington ZIP (Census ACS)
     storage.ts        localStorage persistence, shareable-link codec, JSON backups
     clipboard.ts      Clipboard helper
     format.ts         Currency/percent formatting + live digit grouping for inputs
@@ -156,7 +168,7 @@ src/
     taxRates.ts       Greater Seattle 2026 property tax rates (reference data)
   hooks/
     useDeals.ts       Deal state: create/duplicate/rename/delete/restore/import + persistence
-    useListings.ts    Find-listings state: datasets, filters, assumptions, sort, shortlist
+    useListings.ts    Find-listings state: datasets, perspective, filters, assumptions, sort, shortlist
     useToast.ts       Transient messages with an optional Undo action
     useTheme.ts       Light/dark theme (OS default, saved override)
     useCompareSelection.ts  Which deals the comparison includes
@@ -207,9 +219,15 @@ src/
   from the remarks ("3-bedroom") when they say, and otherwise show as a floor
   ("2+ bd") that the Min beds filter doesn't rule out. Rent is an estimate:
   rent per sqft up to 1,500 sqft and half that beyond (big homes rent for less
-  per foot); check real rent comps before offering. Comps need at least 5
-  listings of the same type in the city, falling back to that type across all
-  data, then to everything. The score ranks listings against each other; it is
+  per foot), times the listing's ZIP median rent over the typical ZIP's in the
+  data (kept within ×0.75–×1.35); check real rent comps before offering. ZIP
+  figures are the Census Bureau's ACS 2020–2024 5-year estimates (median gross
+  rent B25064, median household income B19013); `node scripts/zip-stats.mjs`
+  refreshes them. ZIP rent only feeds the rent estimate; ZIP income is shown
+  for context and never scored. Both lag today's market. Comps need at least 5 other listings: similar-size homes of
+  the same type in the city, then that type in the city at any size, then
+  similar-size homes of that type in every city, then that type, then
+  everything. The score ranks listings against each other; it is
   not an absolute verdict.
 
 Developed & maintained by Andrei Villasana.

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
+import { FRONT_RATIO_PASS_PERCENT } from '../lib/calculations'
 import { PROPERTY_TYPE_LABELS } from '../lib/mls'
 import type { ListingAnalysis } from '../lib/screening'
 
@@ -24,6 +25,7 @@ function signedCurrency(value: number | null): string {
 export function ListingCard({ analysis, shortlisted, onToggleShortlist, onNewDeal }: ListingCardProps) {
   const [open, setOpen] = useState(false)
   const { listing: l } = analysis
+  const isOwner = analysis.perspective === 'owner'
   const fullAddress = `${l.address}, ${l.city}, WA ${l.zip}`
   const query = encodeURIComponent(fullAddress)
   const detailsId = `listing-details-${l.id}`
@@ -50,6 +52,17 @@ export function ListingCard({ analysis, shortlisted, onToggleShortlist, onNewDea
             </span>
           ) : null}
           <span className="tag">{PROPERTY_TYPE_LABELS[l.type]}</span>
+          {l.alsoListedAs && l.alsoListedAs.length > 0 ? (
+            <span
+              className="tag"
+              title={`The same home under another listing number: ${l.alsoListedAs
+                .map((d) => `#${d.id}`)
+                .join(', ')}`}
+            >
+              Also listed as{' '}
+              {[...new Set(l.alsoListedAs.map((d) => PROPERTY_TYPE_LABELS[d.type]))].join(', ')}
+            </span>
+          ) : null}
         </div>
         <div className="listing-card-address">
           {l.address}
@@ -94,20 +107,51 @@ export function ListingCard({ analysis, shortlisted, onToggleShortlist, onNewDea
               ) : null}
             </dd>
           </div>
-          <div>
-            <dt>Est. rent</dt>
-            <dd>{formatCurrency(analysis.rent)}</dd>
-          </div>
-          <div>
-            <dt>Cash flow</dt>
-            <dd className={(analysis.cashFlow ?? 0) >= 0 ? 'positive' : 'negative'}>
-              {signedCurrency(analysis.cashFlow)}/mo
-            </dd>
-          </div>
-          <div>
-            <dt>Cap rate</dt>
-            <dd>{formatPercent(analysis.capRate)}</dd>
-          </div>
+          {isOwner ? (
+            <>
+              <div>
+                <dt>Monthly cost</dt>
+                <dd title="Mortgage, property tax, insurance, PMI and HOA">
+                  {formatCurrency(analysis.housingCost)}
+                </dd>
+              </div>
+              <div>
+                <dt>Of income</dt>
+                <dd
+                  className={
+                    analysis.incomeShare == null
+                      ? undefined
+                      : analysis.incomeShare <= FRONT_RATIO_PASS_PERCENT
+                        ? 'positive'
+                        : 'negative'
+                  }
+                >
+                  {analysis.incomeShare == null ? '—' : `${Math.round(analysis.incomeShare)}%`}
+                </dd>
+              </div>
+              <div>
+                <dt>Cash to close</dt>
+                <dd>{formatCurrency(analysis.cashNeeded)}</dd>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <dt>Est. rent</dt>
+                <dd>{formatCurrency(analysis.rent)}</dd>
+              </div>
+              <div>
+                <dt>Cash flow</dt>
+                <dd className={(analysis.cashFlow ?? 0) >= 0 ? 'positive' : 'negative'}>
+                  {signedCurrency(analysis.cashFlow)}/mo
+                </dd>
+              </div>
+              <div>
+                <dt>Cap rate</dt>
+                <dd>{formatPercent(analysis.capRate)}</dd>
+              </div>
+            </>
+          )}
         </dl>
         {analysis.reasons.length > 0 ? (
           <ul className="listing-reasons" aria-label="Why it scored this way">
@@ -137,17 +181,69 @@ export function ListingCard({ analysis, shortlisted, onToggleShortlist, onNewDea
                   {analysis.taxRateEstimated ? ' (regional median)' : ''}
                 </dd>
               </div>
+              {isOwner ? (
+                <>
+                  <div>
+                    <dt>PMI</dt>
+                    <dd>{analysis.pmi ? `${formatCurrency(analysis.pmi)}/mo` : 'None'}</dd>
+                  </div>
+                  <div>
+                    <dt>With upkeep</dt>
+                    <dd title="Monthly cost plus a 1%-a-year maintenance reserve">
+                      {formatCurrency(analysis.ownershipCost)}/mo
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Would rent for</dt>
+                    <dd>{formatCurrency(analysis.rent)}/mo</dd>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <dt>Cash to close</dt>
+                    <dd>{formatCurrency(analysis.cashNeeded)}</dd>
+                  </div>
+                  <div>
+                    <dt>Cash-on-cash</dt>
+                    <dd>{formatPercent(analysis.cashOnCash)}</dd>
+                  </div>
+                  <div>
+                    <dt>Rent / price</dt>
+                    <dd>{formatPercent(analysis.rentToPrice)}</dd>
+                  </div>
+                </>
+              )}
               <div>
-                <dt>Cash to close</dt>
-                <dd>{formatCurrency(analysis.cashNeeded)}</dd>
+                <dt>Compared with</dt>
+                <dd>
+                  {analysis.comps
+                    ? `${analysis.comps.count} ${analysis.comps.label}, median ${formatCurrency(analysis.comps.medianPricePerSqft)}/sqft`
+                    : '—'}
+                </dd>
               </div>
               <div>
-                <dt>Cash-on-cash</dt>
-                <dd>{formatPercent(analysis.cashOnCash)}</dd>
+                <dt>ZIP {l.zip} median rent</dt>
+                <dd>
+                  {analysis.zip?.medianRent != null ? (
+                    <>
+                      {formatCurrency(analysis.zip.medianRent)}/mo
+                      {!isOwner && analysis.rentFactor !== 1
+                        ? ` (rent ×${analysis.rentFactor.toFixed(2)})`
+                        : ''}
+                    </>
+                  ) : (
+                    'No Census data'
+                  )}
+                </dd>
               </div>
               <div>
-                <dt>Rent / price</dt>
-                <dd>{formatPercent(analysis.rentToPrice)}</dd>
+                <dt>ZIP {l.zip} median income</dt>
+                <dd>
+                  {analysis.zip?.medianIncome != null
+                    ? `${formatCurrency(analysis.zip.medianIncome)}/yr`
+                    : 'No Census data'}
+                </dd>
               </div>
               <div>
                 <dt>Style</dt>

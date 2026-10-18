@@ -3,15 +3,22 @@ import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 import { PROPERTY_TYPE_LABELS, type PropertyType } from '../lib/mls'
 import {
   LARGE_LOT_SQFT,
-  RENT_TAPER_SQFT,
+  SIZE_BAND,
+  SORTS_FOR,
   SORT_LABELS,
+  YARD_LOT_SQFT,
+  ZIP_STATS_SOURCE,
   type ListingAnalysis,
+  type Perspective,
   type SortKey,
 } from '../lib/screening'
+import { FRONT_RATIO_PASS_PERCENT } from '../lib/calculations'
 import { useListings, type FilterStrings } from '../hooks/useListings'
 import { Field } from './Field'
+import { ListingAssumptions } from './ListingAssumptions'
 import { ListingCard } from './ListingCard'
 import { Section } from './Section'
+import { SegmentedControl } from './SegmentedControl'
 
 interface ListingsViewProps {
   onNewDeal: (analysis: ListingAnalysis) => void
@@ -25,6 +32,11 @@ type ToggleFilter = {
 }[keyof FilterStrings]
 const TYPES: PropertyType[] = ['house', 'townhouse', 'condo', 'manufactured']
 
+const PERSPECTIVE_NOTES: Record<Perspective, string> = {
+  investment: 'Ranks listings as rentals: value, cash flow and cap rate, seller motivation, upside.',
+  owner: 'Ranks listings as a home to live in: value, affordability, condition, yard and garage, room to negotiate.',
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null
   const sorted = [...values].sort((a, b) => a - b)
@@ -34,15 +46,17 @@ function median(values: number[]): number | null {
 
 /**
  * The listings screen: NWMLS exports (bundled from Data/ or imported as CSV)
- * analyzed as rentals and ranked by a screening score, with filters, the
- * assumptions behind the numbers, and a shortlist.
+ * ranked by a screening score from an investor's or a homeowner's
+ * perspective, with filters, the assumptions behind the numbers, and a
+ * shortlist.
  */
 export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
   const api = useListings()
   const fileRef = useRef<HTMLInputElement>(null)
-  const { filters, results, assumptionStrings: a } = api
-  // A new filter or sort starts back at the first page.
-  const pageKey = JSON.stringify([filters, api.sort])
+  const { filters, results } = api
+  const isOwner = api.perspective === 'owner'
+  // A new filter, sort or perspective starts back at the first page.
+  const pageKey = JSON.stringify([filters, api.sort, api.perspective])
   const [paging, setPaging] = useState({ key: pageKey, shown: PAGE_SIZE })
   const shown = paging.key === pageKey ? paging.shown : PAGE_SIZE
 
@@ -98,10 +112,28 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
     null,
   )
   const positiveCashFlow = results.filter((r) => (r.cashFlow ?? -1) >= 0).length
+  const medianMonthly = median(results.flatMap((r) => (r.housingCost != null ? [r.housingCost] : [])))
+  const hasIncome = results.some((r) => r.incomeShare != null)
+  const affordable = results.filter(
+    (r) => r.incomeShare != null && r.incomeShare <= FRONT_RATIO_PASS_PERCENT,
+  ).length
 
   return (
     <div className="layout">
       <div className="layout-side listings-side">
+        <Section title="Screen as">
+          <SegmentedControl
+            label="Perspective"
+            value={api.perspective}
+            options={[
+              { value: 'investment', label: 'Investor (Rental)' },
+              { value: 'owner', label: 'Homeowner' },
+            ]}
+            onChange={api.setPerspective}
+          />
+          <p className="note">{PERSPECTIVE_NOTES[api.perspective]}</p>
+        </Section>
+
         <Section title="Listings data" subtitle="NWMLS CSV exports — overlapping files are merged">
           {api.loading ? <p className="note">Loading listings…</p> : null}
           {api.loadError ? (
@@ -261,78 +293,7 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
           </button>
         </Section>
 
-        <Section
-          title="Rental assumptions"
-          subtitle="Used for every listing's rent, cash flow and cap rate"
-        >
-          <div className="field-grid">
-            <Field
-              id="assume-down"
-              label="Down payment"
-              suffix="%"
-              value={a.downPct}
-              onChange={(v) => api.updateAssumptions({ downPct: v })}
-            />
-            <Field
-              id="assume-rate"
-              label="Interest rate"
-              suffix="%"
-              value={a.rate}
-              onChange={(v) => api.updateAssumptions({ rate: v })}
-            />
-            <Field
-              id="assume-rent"
-              label="Rent per sqft"
-              prefix="$"
-              suffix="/mo"
-              value={a.rentPerSqft}
-              onChange={(v) => api.updateAssumptions({ rentPerSqft: v })}
-              hint={`Half rate past ${formatNumber(RENT_TAPER_SQFT)} sqft`}
-            />
-            <Field
-              id="assume-vacancy"
-              label="Vacancy"
-              suffix="% rent"
-              value={a.vacancyPct}
-              onChange={(v) => api.updateAssumptions({ vacancyPct: v })}
-            />
-            <Field
-              id="assume-repairs"
-              label="Repairs & CapEx"
-              suffix="% rent"
-              value={a.repairsPct}
-              onChange={(v) => api.updateAssumptions({ repairsPct: v })}
-            />
-            <Field
-              id="assume-management"
-              label="Management"
-              suffix="% rent"
-              value={a.managementPct}
-              onChange={(v) => api.updateAssumptions({ managementPct: v })}
-            />
-            <Field
-              id="assume-insurance"
-              label="Insurance"
-              suffix="% / yr"
-              value={a.insurancePct}
-              onChange={(v) => api.updateAssumptions({ insurancePct: v })}
-            />
-            <Field
-              id="assume-closing"
-              label="Closing costs"
-              suffix="%"
-              value={a.closingPct}
-              onChange={(v) => api.updateAssumptions({ closingPct: v })}
-            />
-          </div>
-          <p className="note">
-            Property tax uses each city's 2026 rate (the regional median where the city isn't in
-            the table); HOA dues come from the listing.
-          </p>
-          <button type="button" className="btn btn-small btn-ghost" onClick={api.resetAssumptions}>
-            Reset assumptions
-          </button>
-        </Section>
+        <ListingAssumptions api={api} />
       </div>
 
       <div className="layout-results">
@@ -352,12 +313,31 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
             <span className="listings-summary-stat">
               Median $/sqft <strong>{formatCurrency(medianPpsf)}</strong>
             </span>
-            <span className="listings-summary-stat">
-              Best cap rate <strong>{formatPercent(bestCap)}</strong>
-            </span>
-            <span className="listings-summary-stat">
-              Cash flow ≥ $0 <strong>{positiveCashFlow}</strong>
-            </span>
+            {isOwner ? (
+              <>
+                <span className="listings-summary-stat">
+                  Median monthly cost <strong>{formatCurrency(medianMonthly)}</strong>
+                </span>
+                <span className="listings-summary-stat">
+                  {hasIncome ? (
+                    <>
+                      Within {FRONT_RATIO_PASS_PERCENT}% of income <strong>{affordable}</strong>
+                    </>
+                  ) : (
+                    'Add your income to check affordability'
+                  )}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="listings-summary-stat">
+                  Best cap rate <strong>{formatPercent(bestCap)}</strong>
+                </span>
+                <span className="listings-summary-stat">
+                  Cash flow ≥ $0 <strong>{positiveCashFlow}</strong>
+                </span>
+              </>
+            )}
           </div>
 
           <div className="listings-toolbar">
@@ -368,7 +348,7 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
               value={api.sort}
               onChange={(e) => api.setSort(e.target.value as SortKey)}
             >
-              {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+              {SORTS_FOR[api.perspective].map((key) => (
                 <option key={key} value={key}>
                   {SORT_LABELS[key]}
                 </option>
@@ -378,14 +358,33 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
 
           <details className="listings-score-help">
             <summary>How the score works</summary>
+            {isOwner ? (
+              <p>
+                Out of 100: <strong>value</strong> (30) — $/sqft against similar homes;{' '}
+                <strong>affordability</strong> (25) — the payment (mortgage, tax, insurance, PMI,
+                HOA) as a share of your income, full marks at 25% or less, none past 40%;{' '}
+                <strong>condition</strong> (15) — new construction, recently built, or updated,
+                while fixers get nothing; <strong>livability</strong> (15) — a yard (house lot of{' '}
+                {formatNumber(YARD_LOT_SQFT)}+ sqft), a 2-car garage, a notable view, waterfront;{' '}
+                <strong>negotiation room</strong> (15) — price cuts and days on market. HOA dues,
+                cash-only sales, auctions, 55+ restrictions and manufactured homes take points off.
+              </p>
+            ) : (
+              <p>
+                Out of 100: <strong>value</strong> (35) — $/sqft against similar homes;{' '}
+                <strong>return</strong> (25) — cap rate under your assumptions;{' '}
+                <strong>motivation</strong> (20) — price cuts and days on market;{' '}
+                <strong>upside</strong> (20) — ADU, in-law, fixer or investor mentions in the
+                remarks, and house lots of {formatNumber(LARGE_LOT_SQFT)}+ sqft. HOA dues, 55+ or
+                cash-only restrictions, auctions and manufactured homes take points off. Rent
+                scales with each ZIP's median rent.
+              </p>
+            )}
             <p>
-              Out of 100: <strong>value</strong> (35) — $/sqft against the median for the same
-              property type in the same city; <strong>return</strong> (25) — cap rate under your
-              assumptions; <strong>motivation</strong> (20) — price cuts and days on market;{' '}
-              <strong>upside</strong> (20) — ADU, in-law, fixer or investor mentions in the
-              remarks, and house lots of {formatNumber(LARGE_LOT_SQFT)}+ sqft. HOA dues, 55+ or
-              cash-only restrictions, auctions and manufactured homes take points off. It ranks
-              listings against each other — always check the remarks, photos and real rent comps.
+              Similar homes are the same property type in the same city within ±
+              {Math.round(SIZE_BAND * 100)}% of the size (widening to any size, then all cities,
+              when there are fewer than 5). The score ranks listings against each other — always
+              check the remarks, photos and real comps. ZIP figures: {ZIP_STATS_SOURCE}.
             </p>
           </details>
 

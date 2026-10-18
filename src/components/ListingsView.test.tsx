@@ -143,6 +143,62 @@ describe('ListingsView', () => {
     )
   })
 
+  it('switches to the homeowner perspective with its own assumptions, numbers and sorts', async () => {
+    const user = userEvent.setup()
+    const { onNewDeal } = renderView()
+    await loaded()
+    expect(screen.getByLabelText('Rent per sqft')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'Homeowner' }))
+    expect(screen.queryByLabelText('Rent per sqft')).toBeNull()
+    expect(screen.getByText('Add your income to check affordability')).toBeInTheDocument()
+    const sorts = within(screen.getByLabelText('Sort by')).getAllByRole('option').map((o) => o.textContent)
+    expect(sorts).toContain('Monthly cost (low → high)')
+    expect(sorts).not.toContain('Cap rate')
+
+    await user.type(screen.getByLabelText('Household income'), '180000')
+    expect(screen.getByText(/Within 28% of income/)).toBeInTheDocument()
+    const best = document.querySelector('.listing-card') as HTMLElement
+    expect(within(best).getByText('Monthly cost')).toBeInTheDocument()
+    expect(within(best).queryByText('Cap rate')).toBeNull()
+
+    await user.click(within(best).getByRole('button', { name: 'New deal' }))
+    expect(onNewDeal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        perspective: 'owner',
+        dealInputs: expect.objectContaining({ householdIncome: 15000, rentValue: null }),
+      }),
+    )
+  })
+
+  it("remembers the perspective and keeps each one's assumptions", async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<ListingsView onNewDeal={vi.fn()} notify={vi.fn()} />)
+    await loaded()
+    await user.clear(screen.getByLabelText('Interest rate'))
+    await user.type(screen.getByLabelText('Interest rate'), '7.25')
+    await user.click(screen.getByRole('radio', { name: 'Homeowner' }))
+    expect(screen.getByLabelText('Interest rate')).toHaveValue('6.5')
+
+    unmount()
+    renderView()
+    await loaded()
+    expect(screen.getByRole('radio', { name: 'Homeowner' })).toHaveAttribute('aria-checked', 'true')
+    await user.click(screen.getByRole('radio', { name: 'Investor (Rental)' }))
+    expect(screen.getByLabelText('Interest rate')).toHaveValue('7.25')
+  })
+
+  it('carries settings saved before perspectives over to the investor side', async () => {
+    window.localStorage.setItem(
+      'brrr-calculator/listings/v2',
+      JSON.stringify({ assumptions: { rentPerSqft: '2.5' }, sort: 'capRate' }),
+    )
+    renderView()
+    await loaded()
+    expect(screen.getByLabelText('Rent per sqft')).toHaveValue('2.5')
+    expect(screen.getByLabelText('Sort by')).toHaveValue('capRate')
+  })
+
   it('imports an NWMLS CSV and rejects other files', async () => {
     const user = userEvent.setup()
     const { notify } = renderView()
