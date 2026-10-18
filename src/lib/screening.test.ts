@@ -145,6 +145,11 @@ describe('matchesFilters', () => {
     expect(matchesFilters(condo, { ...DEFAULT_FILTERS, valueAddOnly: true }, none)).toBe(false)
   })
 
+  it('limits to the checked cities', () => {
+    expect(matchesFilters(house, { ...DEFAULT_FILTERS, cities: ['Everett', 'Bothell'] }, none)).toBe(true)
+    expect(matchesFilters(house, { ...DEFAULT_FILTERS, cities: ['Bothell'] }, none)).toBe(false)
+  })
+
   it("doesn't rule out a listing whose bedroom count is only a floor", () => {
     expect(matchesFilters(house, { ...DEFAULT_FILTERS, minBeds: 3 }, none)).toBe(true)
   })

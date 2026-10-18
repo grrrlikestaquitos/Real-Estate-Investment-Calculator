@@ -2322,6 +2322,48 @@ td.negative {
   color: var(--text-dim);
 }
 
+.listings-cities {
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.listings-cities legend {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.listings-cities-count {
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.listings-cities-clear {
+  margin-left: auto;
+  padding: 2px 8px;
+}
+
+.listings-city-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  scrollbar-width: thin;
+}
+
 .listings-checks {
   display: grid;
   gap: 8px;

@@ -66,6 +66,21 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
     api.updateFilters({ types })
   }
 
+  function toggleCity(city: string) {
+    const cities = filters.cities.includes(city)
+      ? filters.cities.filter((c) => c !== city)
+      : [...filters.cities, city]
+    api.updateFilters({ cities })
+  }
+
+  // Keep checked cities listed (with 0) after their dataset is turned off, so they can be unchecked.
+  const cityOptions: [string, number][] = [
+    ...api.cities,
+    ...filters.cities
+      .filter((c) => !api.cities.some(([city]) => city === c))
+      .map((c): [string, number] => [c, 0]),
+  ]
+
   async function handleImport(e: ChangeEvent<HTMLInputElement>) {
     const files = [...(e.target.files ?? [])]
     e.target.value = ''
@@ -183,24 +198,6 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
               onChange={(v) => api.updateFilters({ maxHoa: v })}
               placeholder="Any"
             />
-            <div className="field">
-              <div className="field-label-row">
-                <label htmlFor="listings-city">City</label>
-              </div>
-              <select
-                id="listings-city"
-                className="listings-select"
-                value={filters.city}
-                onChange={(e) => api.updateFilters({ city: e.target.value })}
-              >
-                <option value="">All cities</option>
-                {api.cities.map(([city, count]) => (
-                  <option key={city} value={city}>
-                    {city} ({count})
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
           <div className="listings-filter-group" role="group" aria-label="Property type">
@@ -219,6 +216,39 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
               ))}
             </div>
           </div>
+
+          <fieldset className="listings-cities">
+            <legend className="listings-filter-label">
+              Cities
+              <span className="listings-cities-count">
+                {filters.cities.length > 0 ? `${filters.cities.length} selected` : 'All'}
+              </span>
+              {filters.cities.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-small btn-ghost listings-cities-clear"
+                  onClick={() => api.updateFilters({ cities: [] })}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </legend>
+            <ul className="listings-city-list">
+              {cityOptions.map(([city, count]) => (
+                <li key={city}>
+                  <label className="listings-check">
+                    <input
+                      type="checkbox"
+                      checked={filters.cities.includes(city)}
+                      onChange={() => toggleCity(city)}
+                    />
+                    <span className="listings-dataset-name">{city}</span>
+                    <span className="listings-dataset-count">{count}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
 
           <div className="listings-checks">
             {checkbox('priceCutOnly', 'Price reduced')}
