@@ -11,7 +11,8 @@ const MLS_MODULE = 'virtual:mls-data'
 /**
  * Serves the NWMLS CSV exports in Data/ as `virtual:mls-data`: parsed at build
  * time, so only the fields the app shows reach the bundle (never the
- * agent-only remarks), and loaded lazily by the listings view.
+ * agent-only remarks), and loaded lazily by the listings view. Map positions
+ * saved by scripts/geocode.mjs in Data/geocodes.json ride along as `geocodes`.
  */
 function mlsData(): Plugin {
   const dir = fileURLToPath(new URL('./Data', import.meta.url))
@@ -44,7 +45,15 @@ function mlsData(): Plugin {
         datasets.push({ id: name, name, listings })
       }
       const sets = datasets.map((d) => ({ id: d.id, name: d.name, ids: d.listings.map((l) => l.id) }))
+      // Map positions from scripts/geocode.mjs, keyed by address|zip.
+      const geocodes = join(dir, 'geocodes.json')
+      let points = {}
+      if (existsSync(geocodes)) {
+        this.addWatchFile(geocodes)
+        points = (JSON.parse(readFileSync(geocodes, 'utf8')) as { points?: object }).points ?? {}
+      }
       return [
+        `export const geocodes = ${JSON.stringify(points)}`,
         `const listings = new Map(${JSON.stringify([...unique.values()])}.map((l) => [l.id, l]))`,
         `export default ${JSON.stringify(sets)}.map(({ ids, ...d }) => ({ ...d, listings: ids.map((id) => listings.get(id)) }))`,
       ].join('\n')

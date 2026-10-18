@@ -5,6 +5,25 @@ import { parseMlsCsv } from '../lib/mls'
 import { mlsCsv } from '../test/fixtures/mls'
 import { ListingsView } from './ListingsView'
 
+// Leaflet needs a real browser; stand in for the map with buttons that act like clicking a ZIP.
+vi.mock('./ListingsMap', () => ({
+  default: (props: {
+    zips: { zip: string }[]
+    results: unknown[]
+    hiddenZips: string[]
+    onToggleZip: (zip: string) => void
+  }) => (
+    <div data-testid="map">
+      {props.zips.map((z) => (
+        <button key={z.zip} type="button" onClick={() => props.onToggleZip(z.zip)}>
+          map {z.zip}
+        </button>
+      ))}
+      <span>{props.results.length} dots</span>
+    </div>
+  ),
+}))
+
 vi.mock('virtual:mls-data', async () => {
   const { parseMlsCsv: parse } = await import('../lib/mls')
   const { mlsCsv: csv } = await import('../test/fixtures/mls')
@@ -18,11 +37,20 @@ vi.mock('virtual:mls-data', async () => {
           csv([
             ...rows,
             { id: '1777', price: 480000, original: 540000, sqft: 1500, remarks: 'Fixer with a DADU.' },
-            { id: '1888', price: 650000, sqft: 900, city: 'Bothell', style: '32 - Townhouse', hoa: [300, 'Monthly'] },
+            {
+              id: '1888',
+              price: 650000,
+              sqft: 900,
+              city: 'Bothell',
+              zip: '98011',
+              style: '32 - Townhouse',
+              hoa: [300, 'Monthly'],
+            },
           ]),
         ),
       },
     ],
+    geocodes: { '1777 12th ave se|98208': [47.9, -122.2] },
   }
 })
 
@@ -98,6 +126,30 @@ describe('ListingsView', () => {
     renderView()
     await screen.findByText('1 of 6 listings match your filters')
     expect(screen.getByRole('checkbox', { name: /^Bothell/ })).toBeChecked()
+  })
+
+  it('hides ZIP codes from the map or the checklist', async () => {
+    const user = userEvent.setup()
+    renderView()
+    await loaded()
+    await screen.findByTestId('map')
+    // Only one of the six listings has a saved position.
+    expect(screen.getByText(/5 matching listings have no map position/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'map 98208' }))
+    expect(screen.getByText('1 of 6 listings match your filters')).toBeInTheDocument()
+    expect(screen.getByText('1 hidden')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /^98208/ })).not.toBeChecked()
+
+    await user.click(screen.getByRole('checkbox', { name: /^98208/ }))
+    expect(screen.getByText('6 of 6 listings match your filters')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Hide all ZIPs' }))
+    expect(screen.getByText('0 of 6 listings match your filters')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show ZIP 98011' }))
+    expect(addresses()).toEqual(['1888 12th Ave SE'])
+    await user.click(screen.getByRole('button', { name: 'Show all ZIPs' }))
+    expect(screen.getByText('6 of 6 listings match your filters')).toBeInTheDocument()
   })
 
   it('shortlists listings and remembers them', async () => {

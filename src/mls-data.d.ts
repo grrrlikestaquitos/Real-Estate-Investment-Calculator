@@ -2,4 +2,6 @@
 declare module 'virtual:mls-data' {
   const datasets: import('./lib/mls').MlsDataset[]
   export default datasets
+  /** [lat, lng] by geocodeKey (address|zip), from Data/geocodes.json. */
+  export const geocodes: Record<string, [number, number]>
 }

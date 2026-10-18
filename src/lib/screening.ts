@@ -604,6 +604,8 @@ export interface ScreenFilters {
   types: PropertyType[]
   /** Cities to include (empty = every city). */
   cities: string[]
+  /** ZIP codes to leave out. */
+  hiddenZips: string[]
   minSqft: number | null
   minBeds: number | null
   maxHoa: number | null
@@ -618,6 +620,7 @@ export const DEFAULT_FILTERS: ScreenFilters = {
   maxPrice: null,
   types: [],
   cities: [],
+  hiddenZips: [],
   minSqft: null,
   minBeds: null,
   maxHoa: null,
@@ -637,6 +640,7 @@ export function matchesFilters(
   if (f.maxPrice != null && l.price > f.maxPrice) return false
   if (f.types.length > 0 && !f.types.includes(l.type)) return false
   if (f.cities.length > 0 && !f.cities.includes(l.city)) return false
+  if (f.hiddenZips.includes(l.zip)) return false
   if (f.minSqft != null && (l.sqft ?? 0) < f.minSqft) return false
   // An "at least" bedroom count can't rule a listing out: it may have more.
   if (f.minBeds != null && !l.bedsAtLeast && (l.beds ?? 0) < f.minBeds) return false

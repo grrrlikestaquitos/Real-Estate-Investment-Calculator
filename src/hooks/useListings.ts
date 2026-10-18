@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { parseInput } from '../lib/calculations'
-import { mergeDatasets, parseMlsCsv, type MlsDataset, type PropertyType } from '../lib/mls'
+import {
+  mergeDatasets,
+  parseMlsCsv,
+  withPositions,
+  type MlsDataset,
+  type PropertyType,
+} from '../lib/mls'
 import {
   DEFAULT_INVESTOR_ASSUMPTIONS,
   DEFAULT_OWNER_ASSUMPTIONS,
@@ -29,6 +35,8 @@ export interface FilterStrings {
   types: PropertyType[]
   /** Cities to include (empty = every city). */
   cities: string[]
+  /** ZIP codes to leave out. */
+  hiddenZips: string[]
   priceCutOnly: boolean
   valueAddOnly: boolean
   hideRestricted: boolean
@@ -46,6 +54,7 @@ const DEFAULT_FILTER_STRINGS: FilterStrings = {
   maxHoa: '',
   types: [],
   cities: [],
+  hiddenZips: [],
   priceCutOnly: false,
   valueAddOnly: false,
   hideRestricted: true,
@@ -90,6 +99,7 @@ function loadFilters(saved: unknown): FilterStrings {
   const { city, ...rest } = saved as Partial<FilterStrings> & { city?: unknown }
   const filters = { ...DEFAULT_FILTER_STRINGS, ...rest }
   if (!Array.isArray(filters.cities)) filters.cities = []
+  if (!Array.isArray(filters.hiddenZips)) filters.hiddenZips = []
   if (typeof city === 'string' && city && filters.cities.length === 0) filters.cities = [city]
   return filters
 }
@@ -139,6 +149,7 @@ function toFilters(f: FilterStrings): ScreenFilters {
     maxHoa: parseInput(f.maxHoa),
     types: f.types,
     cities: f.cities,
+    hiddenZips: f.hiddenZips,
     priceCutOnly: f.priceCutOnly,
     valueAddOnly: f.valueAddOnly,
     hideRestricted: f.hideRestricted,
@@ -166,6 +177,7 @@ function parseAssumptions<T extends object>(strings: Record<keyof T, string>, de
 export function useListings() {
   const [initial] = useState(load)
   const [bundled, setBundled] = useState<MlsDataset[] | null>(null)
+  const [geocodes, setGeocodes] = useState<Record<string, [number, number]>>({})
   const [loadError, setLoadError] = useState(false)
   const [imported, setImported] = useState<MlsDataset[]>(initial.imported)
   const [disabled, setDisabled] = useState<string[]>(initial.disabled)
@@ -181,7 +193,9 @@ export function useListings() {
     let cancelled = false
     import('virtual:mls-data')
       .then((mod) => {
-        if (!cancelled) setBundled(mod.default)
+        if (cancelled) return
+        setBundled(mod.default)
+        setGeocodes(mod.geocodes ?? {})
       })
       .catch(() => {
         if (!cancelled) {
@@ -217,7 +231,7 @@ export function useListings() {
     () => datasets.filter((d) => !disabled.includes(d.id)),
     [datasets, disabled],
   )
-  const listings = useMemo(() => mergeDatasets(enabled), [enabled])
+  const listings = useMemo(() => withPositions(mergeDatasets(enabled), geocodes), [enabled, geocodes])
   const context = useMemo(() => buildContext(listings), [listings])
   const assumptions: Assumptions = useMemo(
     () =>
@@ -247,6 +261,35 @@ export function useListings() {
     for (const l of listings) counts.set(l.city, (counts.get(l.city) ?? 0) + 1)
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   }, [listings])
+
+  /** ZIPs in the data: how many listings each has, its cities and its most common NWMLS area. */
+  const zips = useMemo(() => {
+    const byZip = new Map<string, { count: number; cities: Map<string, number>; areas: Map<string, number> }>()
+    const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) ?? 0) + 1)
+    for (const l of listings) {
+      let entry = byZip.get(l.zip)
+      if (!entry) {
+        entry = { count: 0, cities: new Map(), areas: new Map() }
+        byZip.set(l.zip, entry)
+      }
+      entry.count++
+      bump(entry.cities, l.city)
+      if (l.area) bump(entry.areas, l.area)
+    }
+    const ranked = (map: Map<string, number>) => [...map.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k)
+    return [...byZip.entries()]
+      .map(([zip, e]) => ({ zip, count: e.count, cities: ranked(e.cities), area: ranked(e.areas)[0] ?? '' }))
+      .sort((a, b) => a.zip.localeCompare(b.zip))
+  }, [listings])
+
+  function toggleZip(zip: string) {
+    setFilters((current) => ({
+      ...current,
+      hiddenZips: current.hiddenZips.includes(zip)
+        ? current.hiddenZips.filter((z) => z !== zip)
+        : [...current.hiddenZips, zip],
+    }))
+  }
 
   function updateFilters(patch: Partial<FilterStrings>) {
     setFilters((current) => ({ ...current, ...patch }))
@@ -300,6 +343,8 @@ export function useListings() {
     analyses,
     results,
     cities,
+    zips,
+    toggleZip,
     filters,
     updateFilters,
     resetFilters: () => setFilters({ ...DEFAULT_FILTER_STRINGS }),

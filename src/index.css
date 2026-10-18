@@ -2364,6 +2364,193 @@ td.negative {
   scrollbar-width: thin;
 }
 
+.listings-zips {
+  margin: 0 0 14px;
+}
+
+.listings-zips summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.listings-zips .note {
+  margin: 6px 0 8px;
+}
+
+.listings-map {
+  height: 440px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  overflow: hidden;
+  z-index: 0;
+}
+
+.listings-map-loading {
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.listings-map .leaflet-interactive:focus {
+  outline: none;
+}
+
+.listings-map .leaflet-container,
+.listings-map.leaflet-container {
+  font: inherit;
+  background: var(--bg-input);
+}
+
+.listings-map .leaflet-control-attribution {
+  font-size: 0.65rem;
+}
+
+/* OpenStreetMap has no dark tiles: invert them and turn the hues back. */
+:root[data-theme='dark'] .listings-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85) saturate(0.6);
+}
+
+/* ZIP numbers sit on the map only when zoomed in enough to read them. */
+.listings-map .listings-map-zip {
+  display: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: var(--accent-strong);
+  text-shadow:
+    0 0 3px var(--bg-card),
+    0 0 3px var(--bg-card);
+  pointer-events: none;
+}
+
+.listings-map.listings-map-labels .listings-map-zip {
+  display: block;
+}
+
+.listings-map-zip-hidden {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.leaflet-tooltip.listings-map-tip,
+.listings-map .leaflet-popup-content-wrapper,
+.listings-map .leaflet-popup-tip {
+  background: var(--pop-bg);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: var(--pop-shadow);
+}
+
+.leaflet-tooltip.listings-map-tip {
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.listings-map-popup {
+  display: grid;
+  gap: 4px;
+  font-size: 0.82rem;
+}
+
+.listings-map-popup-facts {
+  color: var(--text-dim);
+}
+
+.listings-map-popup .btn {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.listings-map-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 10px;
+}
+
+.listings-map-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.listings-map-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.listings-map-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  box-shadow: 0 0 0 1.5px var(--bg-card);
+}
+
+.listings-map-dot-great {
+  background: var(--positive);
+}
+
+.listings-map-dot-good {
+  background: var(--accent);
+}
+
+.listings-map-swatch {
+  width: 16px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.listings-map-swatch-hidden {
+  background: color-mix(in srgb, var(--text-faint) 40%, transparent);
+  border: 1px dashed var(--text-faint);
+}
+
+.listings-map-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.listings-hidden-zips {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.listing-card-flash {
+  animation: listing-flash 1.6s ease-out;
+}
+
+@keyframes listing-flash {
+  0%,
+  30% {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listing-card-flash {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+}
+
 .listings-checks {
   display: grid;
   gap: 8px;
@@ -2652,6 +2839,10 @@ td.negative {
   .listing-metrics,
   .listing-details-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .listings-map {
+    height: 340px;
   }
 }
 

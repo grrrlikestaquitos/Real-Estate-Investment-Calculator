@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react'
+import { Suspense, lazy, useRef, useState, type ChangeEvent } from 'react'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 import { PROPERTY_TYPE_LABELS, type PropertyType } from '../lib/mls'
 import {
@@ -26,6 +26,9 @@ interface ListingsViewProps {
 }
 
 const PAGE_SIZE = 30
+
+// Leaflet and the ZIP shapes load only when the listings view does.
+const ListingsMap = lazy(() => import('./ListingsMap'))
 
 type ToggleFilter = {
   [K in keyof FilterStrings]: FilterStrings[K] extends boolean ? K : never
@@ -59,6 +62,20 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
   const pageKey = JSON.stringify([filters, api.sort, api.perspective])
   const [paging, setPaging] = useState({ key: pageKey, shown: PAGE_SIZE })
   const shown = paging.key === pageKey ? paging.shown : PAGE_SIZE
+  // "Go to listing" on the map: bring its card into the list, then (once it has
+  // rendered) scroll to it and flash it.
+  function selectListing(id: string) {
+    const index = results.findIndex((r) => r.listing.id === id)
+    if (index >= shown) setPaging({ key: pageKey, shown: Math.ceil((index + 1) / PAGE_SIZE) * PAGE_SIZE })
+    window.setTimeout(() => {
+      const card = document.getElementById(`listing-${id}`)
+      if (!card) return
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' })
+      card.classList.add('listing-card-flash')
+      window.setTimeout(() => card.classList.remove('listing-card-flash'), 1600)
+    }, 0)
+  }
 
   function checkbox(key: ToggleFilter, label: string) {
     return (
@@ -112,6 +129,7 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
     null,
   )
   const positiveCashFlow = results.filter((r) => (r.cashFlow ?? -1) >= 0).length
+  const unplaced = results.filter((r) => r.listing.lat == null).length
   const medianMonthly = median(results.flatMap((r) => (r.housingCost != null ? [r.housingCost] : [])))
   const hasIncome = results.some((r) => r.incomeShare != null)
   const affordable = results.filter(
@@ -282,6 +300,33 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
             </ul>
           </fieldset>
 
+          <details className="listings-zips">
+            <summary className="listings-filter-label">
+              ZIP codes
+              <span className="listings-cities-count">
+                {filters.hiddenZips.length > 0 ? `${filters.hiddenZips.length} hidden` : 'All shown'}
+              </span>
+            </summary>
+            <p className="note">Uncheck a ZIP to hide its listings, or click it on the map.</p>
+            <ul className="listings-city-list">
+              {api.zips.map((z) => (
+                <li key={z.zip}>
+                  <label className="listings-check" title={z.area || undefined}>
+                    <input
+                      type="checkbox"
+                      checked={!filters.hiddenZips.includes(z.zip)}
+                      onChange={() => api.toggleZip(z.zip)}
+                    />
+                    <span className="listings-dataset-name">
+                      {z.zip} {z.cities[0]}
+                    </span>
+                    <span className="listings-dataset-count">{z.count}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </details>
+
           <div className="listings-checks">
             {checkbox('priceCutOnly', 'Price reduced')}
             {checkbox('valueAddOnly', 'Value-add signals (ADU, in-law, fixer…)')}
@@ -297,6 +342,81 @@ export function ListingsView({ onNewDeal, notify }: ListingsViewProps) {
       </div>
 
       <div className="layout-results">
+        <Section
+          title="Map"
+          wide
+          subtitle={`Click a ZIP to hide or show its listings · ${
+            filters.hiddenZips.length > 0 ? `${filters.hiddenZips.length} hidden` : 'none hidden'
+          }`}
+        >
+          <Suspense fallback={<div className="listings-map listings-map-loading">Loading map…</div>}>
+            <ListingsMap
+              zips={api.zips}
+              results={results}
+              hiddenZips={filters.hiddenZips}
+              onToggleZip={api.toggleZip}
+              onSelectListing={selectListing}
+            />
+          </Suspense>
+          <div className="listings-map-bar">
+            <ul className="listings-map-legend" aria-label="Map legend">
+              <li>
+                <span className="listings-map-dot listings-map-dot-great" /> Score 70+
+              </li>
+              <li>
+                <span className="listings-map-dot listings-map-dot-good" /> 50–69
+              </li>
+              <li>
+                <span className="listings-map-dot" /> Under 50
+              </li>
+              <li>
+                <span className="listings-map-swatch listings-map-swatch-hidden" /> Hidden ZIP
+              </li>
+            </ul>
+            <div className="listings-map-actions">
+              {filters.hiddenZips.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-small btn-ghost"
+                  onClick={() => api.updateFilters({ hiddenZips: [] })}
+                >
+                  Show all ZIPs
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-small btn-ghost"
+                title="Then click the ZIPs you want back"
+                onClick={() => api.updateFilters({ hiddenZips: api.zips.map((z) => z.zip) })}
+              >
+                Hide all ZIPs
+              </button>
+            </div>
+          </div>
+          {filters.hiddenZips.length > 0 ? (
+            <ul className="chips listings-hidden-zips" aria-label="Hidden ZIP codes">
+              {[...filters.hiddenZips].sort().map((zip) => (
+                <li key={zip}>
+                  <button
+                    type="button"
+                    className="chip chip-active"
+                    aria-label={`Show ZIP ${zip}`}
+                    onClick={() => api.toggleZip(zip)}
+                  >
+                    {zip} ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {unplaced > 0 ? (
+            <p className="note">
+              {unplaced} matching {unplaced === 1 ? 'listing has' : 'listings have'} no map position
+              (an address the geocoder couldn't find, or an imported CSV) — they're still in the list.
+            </p>
+          ) : null}
+        </Section>
+
         <Section
           title="Ranked listings"
           wide
