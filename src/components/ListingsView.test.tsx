@@ -1,45 +1,47 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { computeResults } from '../lib/calculations'
-import { DEFAULT_INPUTS, type Deal } from '../lib/types'
+import { parseMlsCsv } from '../lib/mls'
+import { mlsCsv } from '../test/fixtures/mls'
 import { ListingsView } from './ListingsView'
 
-const deal: Deal = {
-  id: 'd1',
-  name: 'My Deal',
-  type: 'investment',
-  inputs: { ...DEFAULT_INPUTS },
-  createdAt: 0,
-  updatedAt: 0,
-}
-
-// A real Zillow map search URL (area = bounding box), as copied from the address bar.
-const MAP_SEARCH_URL =
-  'https://www.zillow.com/homes/for_sale/?category=SEMANTIC&searchQueryState=%7B%22isMapVisible%22%3Atrue%2C%22mapBounds%22%3A%7B%22west%22%3A-122.38707035134401%2C%22east%22%3A-122.2325751120862%2C%22south%22%3A47.668900406942974%2C%22north%22%3A47.76037464289794%7D%2C%22filterState%22%3A%7B%22sort%22%3A%7B%22value%22%3A%22globalrelevanceex%22%7D%7D%2C%22isListVisible%22%3Atrue%2C%22mapZoom%22%3A13%7D'
-
-const LISTINGS_JSON = JSON.stringify({
-  listings: [
-    { price: 300000, address: '300 Easy St', url: 'https://z/1' },
-    { price: 450000, address: '450 Easy St', url: 'https://z/2' },
-    { price: 500000, address: '500 Easy St', url: 'https://z/3' },
-    { price: 540000, address: '540 Easy St', url: 'https://z/4' },
-    { price: 560000, address: '560 Easy St', url: 'https://z/5' },
-  ],
+vi.mock('virtual:mls-data', async () => {
+  const { parseMlsCsv: parse } = await import('../lib/mls')
+  const { mlsCsv: csv } = await import('../test/fixtures/mls')
+  const rows = ['1001', '1002', '1003', '1004'].map((id) => ({ id, price: 600000, sqft: 1500 }))
+  return {
+    default: [
+      {
+        id: 'Area, 5 mi',
+        name: 'Area, 5 mi',
+        listings: parse(
+          csv([
+            ...rows,
+            { id: '1777', price: 480000, original: 540000, sqft: 1500, remarks: 'Fixer with a DADU.' },
+            { id: '1888', price: 650000, sqft: 900, style: '32 - Townhouse', hoa: [300, 'Monthly'] },
+          ]),
+        ),
+      },
+    ],
+  }
 })
 
-function renderView(onNewDeal: () => void = vi.fn()) {
+function renderView() {
+  const onNewDeal = vi.fn()
   const notify = vi.fn()
-  render(<ListingsView deal={deal} results={computeResults(deal.inputs)} onNewDeal={onNewDeal} notify={notify} />)
+  render(<ListingsView onNewDeal={onNewDeal} notify={notify} />)
   return { onNewDeal, notify }
 }
 
-async function pasteListings(user: ReturnType<typeof userEvent.setup>, text: string) {
-  const textarea = screen.getByLabelText('Or paste the JSON here')
-  await user.clear(textarea)
-  await user.click(textarea)
-  await user.paste(text)
-  await user.click(screen.getByRole('button', { name: /add pasted listings/i }))
+
+async function loaded() {
+  await screen.findByText('6 of 6 listings match your filters')
+}
+
+function addresses(): string[] {
+  return [...document.querySelectorAll('.listing-card-address')].map(
+    (el) => el.firstChild?.textContent ?? '',
+  )
 }
 
 describe('ListingsView', () => {
@@ -47,88 +49,94 @@ describe('ListingsView', () => {
     window.localStorage.clear()
   })
 
-  it('buckets imported listings into in-range and buffer groups as the range changes', async () => {
-    const user = userEvent.setup()
-    const { notify } = renderView()
-    await pasteListings(user, LISTINGS_JSON)
-    expect(notify).toHaveBeenCalledWith('Listings added.')
-
-    // No max yet: everything is in range, no buffer group.
-    expect(screen.queryByText(/within \+10\.00% buffer/i)).toBeNull()
-    expect(screen.getByText('560 Easy St')).toBeInTheDocument()
-
-    // Set a max: boundary is inclusive; the buffer catches the next listing.
-    await user.type(screen.getByLabelText('Max price'), '500000')
-    expect(screen.getByText('In range')).toBeInTheDocument()
-    expect(screen.getByText('300 Easy St')).toBeInTheDocument()
-    expect(screen.getByText('500 Easy St')).toBeInTheDocument()
-    const bufferGroup = screen.getByText(/within \+10\.00% buffer/i)
-    expect(bufferGroup).toBeInTheDocument()
-    expect(screen.getByText('540 Easy St')).toBeInTheDocument()
-    expect(screen.queryByText('560 Easy St')).toBeNull()
-
-    // Widen the buffer: the last listing joins the buffer group.
-    const bufferInput = screen.getByLabelText('Buffer')
-    await user.clear(bufferInput)
-    await user.type(bufferInput, '20')
-    expect(screen.getByText('560 Easy St')).toBeInTheDocument()
+  it('ranks the bundled listings with the best deal first and explains why', async () => {
+    renderView()
+    await loaded()
+    expect(addresses()[0]).toBe('1777 12th Ave SE')
+    const best = document.querySelector('.listing-card')!
+    expect(within(best as HTMLElement).getByText('Fixer / as-is')).toBeInTheDocument()
+    expect(within(best as HTMLElement).getByText('ADU / DADU')).toBeInTheDocument()
+    expect(within(best as HTMLElement).getByText(/Price cut 11%/)).toBeInTheDocument()
   })
 
-  it('creates a deal from a listing with its price and address', async () => {
+  it('filters by price, type and HOA', async () => {
     const user = userEvent.setup()
-    const onNewDeal = vi.fn()
-    renderView(onNewDeal)
-    await pasteListings(user, LISTINGS_JSON)
+    renderView()
+    await loaded()
 
-    const card = screen.getByText('450 Easy St').closest('li')
-    expect(card).not.toBeNull()
-    await user.click(within(card!).getByRole('button', { name: 'New deal' }))
-    expect(onNewDeal).toHaveBeenCalledWith(
-      expect.objectContaining({ price: 450000, address: '450 Easy St' }),
+    await user.type(screen.getByLabelText('Max price'), '500000')
+    expect(screen.getByText('1 of 6 listings match your filters')).toBeInTheDocument()
+    await user.clear(screen.getByLabelText('Max price'))
+
+    await user.click(screen.getByRole('button', { name: 'Townhouse' }))
+    expect(addresses()).toEqual(['1888 12th Ave SE'])
+    await user.type(screen.getByLabelText('Max HOA'), '200')
+    expect(screen.getByText(/No listings match/)).toBeInTheDocument()
+  })
+
+  it('shortlists listings and remembers them', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<ListingsView onNewDeal={vi.fn()} notify={vi.fn()} />)
+    await loaded()
+    await user.click(screen.getByRole('button', { name: 'Shortlist 1888 12th Ave SE' }))
+    await user.click(screen.getByLabelText(/Shortlist only \(1\)/))
+    expect(addresses()).toEqual(['1888 12th Ave SE'])
+
+    unmount()
+    renderView()
+    await screen.findByText('1 of 6 listings match your filters')
+    expect(screen.getByRole('button', { name: 'Remove 1888 12th Ave SE from shortlist' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
     )
   })
 
-  it('shows an error for unparseable input and recovers on a good paste', async () => {
+  it('recomputes cash flow when the assumptions change', async () => {
     const user = userEvent.setup()
     renderView()
-    await pasteListings(user, 'not json at all')
-    expect(screen.getByText(/doesn't look like listings json/i)).toBeInTheDocument()
-
-    await pasteListings(user, LISTINGS_JSON)
-    expect(screen.queryByText(/doesn't look like listings json/i)).toBeNull()
-    expect(screen.getByText('450 Easy St')).toBeInTheDocument()
+    await loaded()
+    const first = () => document.querySelector('.listing-card')!.textContent!
+    const before = first()
+    await user.clear(screen.getByLabelText('Rent per sqft'))
+    await user.type(screen.getByLabelText('Rent per sqft'), '3')
+    expect(first()).not.toBe(before)
+    expect(first()).toContain('$4,500')
   })
 
-  it("reopens the search on Zillow with the range applied to Zillow's own filters", async () => {
+  it('starts a deal from a listing', async () => {
+    const user = userEvent.setup()
+    const { onNewDeal } = renderView()
+    await loaded()
+    const best = document.querySelector('.listing-card') as HTMLElement
+    await user.click(within(best).getByRole('button', { name: 'New deal' }))
+    expect(onNewDeal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        listing: expect.objectContaining({ id: '1777' }),
+        dealInputs: expect.objectContaining({ propertyValue: 480000, rentValue: 3000 }),
+      }),
+    )
+  })
+
+  it('imports an NWMLS CSV and rejects other files', async () => {
+    const user = userEvent.setup()
+    const { notify } = renderView()
+    await loaded()
+    const input = screen.getByLabelText('Import NWMLS CSV exports')
+    const csv = mlsCsv([{ id: '5555', price: 520000, sqft: 1600 }])
+    expect(parseMlsCsv(csv)).toHaveLength(1)
+    await user.upload(input, new File([csv], 'More homes.csv', { type: 'text/csv' }))
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Imported 1 listings from More homes.csv'))
+    expect(screen.getByText('7 of 7 listings match your filters')).toBeInTheDocument()
+
+    await user.upload(input, new File(['a,b\n1,2\n'], 'junk.csv', { type: 'text/csv' }))
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("junk.csv isn't an NWMLS CSV export.", 'error'))
+  })
+
+  it('turns a dataset off', async () => {
     const user = userEvent.setup()
     renderView()
-
-    const urlField = screen.getByLabelText('Zillow search URL')
-    await fireEvent.change(urlField, { target: { value: MAP_SEARCH_URL } })
-    await user.type(screen.getByLabelText('Min price'), '200000')
-    await user.type(screen.getByLabelText('Max price'), '500000')
-
-    const link = screen.getByRole('link', { name: /open on zillow/i })
-    const state = JSON.parse(
-      new URL(link.getAttribute('href') ?? '').searchParams.get('searchQueryState') ?? '',
-    ) as {
-      filterState: { price: { min: number; max: number }; sort: { value: string } }
-      mapZoom: number
-    }
-    // Max is the buffered ceiling (500k + 10%) so buffer listings load too.
-    expect(state.filterState.price).toEqual({ min: 200000, max: 550000 })
-    expect(state.filterState.sort).toEqual({ value: 'price_asc' })
-    // The map search's own area state survives the rewrite.
-    expect(state.mapZoom).toBe(13)
-    expect(link).toHaveAttribute('target', '_blank')
-  })
-
-  it('flags a pasted URL that is not a Zillow search', async () => {
-    renderView()
-    await fireEvent.change(screen.getByLabelText('Zillow search URL'), {
-      target: { value: 'https://www.redfin.com/homes' },
-    })
-    expect(screen.getByText(/doesn't look like a zillow url/i)).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /open on zillow/i })).toBeNull()
+    await loaded()
+    await user.click(screen.getByLabelText(/Area, 5 mi/))
+    expect(screen.getByText('0 of 0 listings match your filters')).toBeInTheDocument()
   })
 })

@@ -20,8 +20,8 @@ import {
 import { copyText } from './lib/clipboard'
 import { exportDealsJson, parseImportedDeals } from './lib/storage'
 import { GLOSSARY } from './lib/glossary'
-import type { Listing } from './lib/listings'
-import { ANALYSIS_HORIZONS, DEFAULT_INPUTS } from './lib/types'
+import type { ListingAnalysis } from './lib/screening'
+import { ANALYSIS_HORIZONS } from './lib/types'
 import { CompareChart } from './components/CompareChart'
 import { ComparisonTable } from './components/ComparisonTable'
 import { DealForm } from './components/DealForm'
@@ -99,17 +99,13 @@ export default function App() {
     setView('deal')
   }
 
-  /** Start a new investor deal prefilled with a listing's price and size. */
-  function handleNewDealFromListing(listing: Listing) {
-    const id = deals.createDeal(listing.address, 'investment', {
-      ...DEFAULT_INPUTS,
-      propertyValue: listing.price,
-      propertySize: listing.sqft,
-    })
+  /** Start a new investor deal from a listing, with the numbers it was screened by. */
+  function handleNewDealFromListing({ listing, dealInputs }: ListingAnalysis) {
+    const id = deals.createDeal(`${listing.address}, ${listing.city}`, 'investment', dealInputs)
     setNewDealId(id)
     setView('deal')
     showToast(
-      `Started "${listing.address}" with the price${listing.sqft != null ? ' and size' : ''} filled in.`,
+      `Started "${listing.address}" with the price, estimated rent, financing and expenses filled in.`,
     )
   }
 
@@ -332,8 +328,6 @@ export default function App() {
           </>
         ) : findingListings ? (
           <ListingsView
-            deal={activeDeal}
-            results={results}
             onNewDeal={handleNewDealFromListing}
             notify={(text, tone) => showToast(text, tone ? { tone } : undefined)}
           />
